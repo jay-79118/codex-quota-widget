@@ -39,26 +39,35 @@ Save-Logo 'Assets\Square44x44Logo.png' 44 44
 Save-Logo 'Assets\Square150x150Logo.png' 150 150
 Save-Logo 'Assets\Wide310x150Logo.png' 310 150
 Save-Logo 'Assets\SplashScreen.png' 620 300
-Save-Logo 'ProviderAssets\Quota_Icon.png' 32 16
+Save-Logo 'ProviderAssets\Quota_Icon.png' 32 32
 
-$shot = New-Object Drawing.Bitmap(227,126)
+$shot = New-Object Drawing.Bitmap(300,304)
 $graphics = [Drawing.Graphics]::FromImage($shot)
 try {
   $graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
-  $graphics.Clear([Drawing.ColorTranslator]::FromHtml('#202631'))
-  $title = New-Object Drawing.Font('Microsoft YaHei UI',10,[Drawing.FontStyle]::Bold)
-  $label = New-Object Drawing.Font('Microsoft YaHei UI',8,[Drawing.FontStyle]::Regular)
-  $number = New-Object Drawing.Font('Segoe UI',18,[Drawing.FontStyle]::Bold)
+  $graphics.Clear([Drawing.Color]::Transparent)
+  $card = New-Object Drawing.Drawing2D.GraphicsPath
+  $card.AddArc(0,0,32,32,180,90)
+  $card.AddArc(268,0,32,32,270,90)
+  $card.AddArc(268,272,32,32,0,90)
+  $card.AddArc(0,272,32,32,90,90)
+  $card.CloseFigure()
+  $background = New-Object Drawing.SolidBrush([Drawing.ColorTranslator]::FromHtml('#202631'))
+  $graphics.FillPath($background,$card)
+  $title = New-Object Drawing.Font('Microsoft YaHei UI',15,[Drawing.FontStyle]::Bold)
+  $label = New-Object Drawing.Font('Microsoft YaHei UI',11,[Drawing.FontStyle]::Regular)
+  $number = New-Object Drawing.Font('Segoe UI',29,[Drawing.FontStyle]::Bold)
   $brush = New-Object Drawing.SolidBrush([Drawing.ColorTranslator]::FromHtml('#F0F5F9'))
   $muted = New-Object Drawing.SolidBrush([Drawing.ColorTranslator]::FromHtml('#BBC6D4'))
   try {
-    $graphics.DrawString('额度剩余',$title,$brush,12,8)
-    $graphics.DrawString('5 小时',$label,$muted,12,39)
-    $graphics.DrawString('一周',$label,$muted,118,39)
-    $graphics.DrawString('72%',$number,$brush,11,53)
-    $graphics.DrawString('91%',$number,$brush,117,53)
-    $graphics.DrawString('9/22 14:25',$label,$muted,12,93)
-    $graphics.DrawString('9/29 09:25',$label,$muted,118,93)
-  } finally { $muted.Dispose(); $brush.Dispose(); $title.Dispose(); $label.Dispose(); $number.Dispose() }
+    $graphics.DrawString('额度剩余',$title,$brush,22,21)
+    $graphics.DrawString('5 小时',$label,$muted,22,82)
+    $graphics.DrawString('一周',$label,$muted,163,82)
+    $graphics.DrawString('72%',$number,$brush,20,107)
+    $graphics.DrawString('91%',$number,$brush,160,107)
+    $graphics.DrawString('9/22 14:25',$label,$muted,22,173)
+    $graphics.DrawString('9/29 09:25',$label,$muted,163,173)
+    $graphics.DrawString('14:25 更新',$label,$muted,22,238)
+  } finally { $muted.Dispose(); $brush.Dispose(); $title.Dispose(); $label.Dispose(); $number.Dispose(); $background.Dispose(); $card.Dispose() }
   $shot.Save((Join-Path $root 'ProviderAssets\Quota_Screenshot.png'),[Drawing.Imaging.ImageFormat]::Png)
 } finally { $graphics.Dispose(); $shot.Dispose() }
