@@ -1,0 +1,11 @@
+# Personal runtime state and machine-specific launchers
+settings.json
+*.lnk
+*.log
+*.tmp
+*.pdb
+
+# Local captures and development artifacts
+previews/
+captures/
+node_modules/
