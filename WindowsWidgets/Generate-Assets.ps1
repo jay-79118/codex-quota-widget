@@ -46,14 +46,19 @@ $graphics = [Drawing.Graphics]::FromImage($shot)
 try {
   $graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
   $graphics.Clear([Drawing.ColorTranslator]::FromHtml('#202631'))
-  Draw-Rings $graphics 15 31 62
-  $title = New-Object Drawing.Font('Segoe UI',11,[Drawing.FontStyle]::Bold)
-  $body = New-Object Drawing.Font('Segoe UI',10,[Drawing.FontStyle]::Regular)
+  $title = New-Object Drawing.Font('Microsoft YaHei UI',10,[Drawing.FontStyle]::Bold)
+  $label = New-Object Drawing.Font('Microsoft YaHei UI',8,[Drawing.FontStyle]::Regular)
+  $number = New-Object Drawing.Font('Segoe UI',18,[Drawing.FontStyle]::Bold)
   $brush = New-Object Drawing.SolidBrush([Drawing.ColorTranslator]::FromHtml('#F0F5F9'))
+  $muted = New-Object Drawing.SolidBrush([Drawing.ColorTranslator]::FromHtml('#BBC6D4'))
   try {
-    $graphics.DrawString('Codex quota',$title,$brush,86,20)
-    $graphics.DrawString('5h  72%',$body,$brush,86,52)
-    $graphics.DrawString('week  91%',$body,$brush,86,76)
-  } finally { $brush.Dispose(); $title.Dispose(); $body.Dispose() }
+    $graphics.DrawString('额度剩余',$title,$brush,12,8)
+    $graphics.DrawString('5 小时',$label,$muted,12,39)
+    $graphics.DrawString('一周',$label,$muted,118,39)
+    $graphics.DrawString('72%',$number,$brush,11,53)
+    $graphics.DrawString('91%',$number,$brush,117,53)
+    $graphics.DrawString('9/22 14:25',$label,$muted,12,93)
+    $graphics.DrawString('9/29 09:25',$label,$muted,118,93)
+  } finally { $muted.Dispose(); $brush.Dispose(); $title.Dispose(); $label.Dispose(); $number.Dispose() }
   $shot.Save((Join-Path $root 'ProviderAssets\Quota_Screenshot.png'),[Drawing.Imaging.ImageFormat]::Png)
 } finally { $graphics.Dispose(); $shot.Dispose() }
