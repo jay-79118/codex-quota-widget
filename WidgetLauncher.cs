@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Windows.Forms;
 
@@ -16,17 +17,20 @@ internal static class WidgetLauncher
     {
         try
         {
-            string directory = AppDomain.CurrentDomain.BaseDirectory;
-            string script = Path.Combine(directory, "CodexQuotaWidget.ps1");
-            string data = Path.Combine(directory, "data.js");
-            if (!File.Exists(script) || !File.Exists(data))
-            {
-                MessageBox.Show(
-                    "请将 CodexQuotaWidget.exe、CodexQuotaWidget.ps1 和 data.js 放在同一文件夹。",
-                    "Codex 额度小组件", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
+            string directory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "CodexQuotaWidget");
+            Directory.CreateDirectory(directory);
+            WriteResource("WidgetScript", Path.Combine(directory, "CodexQuotaWidget.ps1"));
+            WriteResource("WidgetData", Path.Combine(directory, "data.js"));
+            WriteResource("WidgetIcon", Path.Combine(directory, "CodexQuotaWidget.ico"));
 
+            string settings = Path.Combine(directory, "settings.json");
+            string previousSettings = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
+            if (!File.Exists(settings) && File.Exists(previousSettings))
+                File.Copy(previousSettings, settings);
+
+            string script = Path.Combine(directory, "CodexQuotaWidget.ps1");
             string powershell = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.System),
                 @"WindowsPowerShell\v1.0\powershell.exe");
@@ -47,6 +51,33 @@ internal static class WidgetLauncher
         {
             MessageBox.Show("启动失败：" + error.Message,
                 "Codex 额度小组件", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private static void WriteResource(string name, string destination)
+    {
+        byte[] bytes;
+        using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name))
+        {
+            if (stream == null) throw new InvalidOperationException("缺少内置文件：" + name);
+            using (var memory = new MemoryStream())
+            {
+                stream.CopyTo(memory);
+                bytes = memory.ToArray();
+            }
+        }
+
+        if (File.Exists(destination) && File.ReadAllBytes(destination).SequenceEqual(bytes)) return;
+        string temporary = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllBytes(temporary, bytes);
+            if (File.Exists(destination)) File.Replace(temporary, destination, null);
+            else File.Move(temporary, destination);
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
         }
     }
 }

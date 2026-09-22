@@ -10,9 +10,11 @@
 
 ## 使用
 
-下载本目录全部运行文件，保持它们位于同一文件夹。双击 `CodexQuotaWidget.exe` 启动；也可使用 `启动小组件.vbs` 或 `启动小组件.cmd`。启动器会隐藏 PowerShell 控制台；小组件和通知区域仍可访问。首次读取通常需要数秒，之后每 60 秒刷新。重复启动不会创建第二个小组件。
+只需下载 `CodexQuotaWidget.exe` 并双击启动。若要直接运行源码，则把 `CodexQuotaWidget.ps1`、`data.js` 和 `CodexQuotaWidget.ico` 放在同一文件夹，再使用 `启动小组件.vbs` 或 `启动小组件.cmd`。启动器会隐藏 PowerShell 控制台；小组件和通知区域仍可访问。首次读取通常需要数秒，之后每 60 秒刷新。重复启动不会创建第二个小组件。
 
-`.exe` 是带图标的启动程序，仍需同目录的 `CodexQuotaWidget.ps1`、`data.js` 和 `CodexQuotaWidget.ico`；额度查询仍依赖已安装的 Codex 和 Node.js。它不含这些程序，也不会修改系统安装。可用 Windows PowerShell 5.1 运行 `build-exe.ps1`，从 `WidgetLauncher.cs` 重新编译。
+`.exe` 已内置小组件脚本、数据脚本和图标，可以单独下载。首次运行会将这些文件放在当前用户的 `%LOCALAPPDATA%\CodexQuotaWidget` 文件夹，设置也保存在那里；不会修改系统安装。额度查询仍依赖已安装的 Codex 和 Node.js。可用 Windows PowerShell 5.1 运行 `build-exe.ps1`，从 `WidgetLauncher.cs` 和同目录源码重新编译。
+
+更新 `.exe` 后，先从小组件右键菜单退出旧实例，再运行新版，让新脚本生效。
 
 当前 `.exe` 未使用代码签名证书，Windows 下载后可能显示发布者未知。可用仓库里的源码和构建脚本自行核对并重新编译。
 
