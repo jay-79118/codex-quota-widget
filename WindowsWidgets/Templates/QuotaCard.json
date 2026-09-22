@@ -1,0 +1,48 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "额度剩余",
+      "weight": "Bolder",
+      "size": "Medium",
+      "spacing": "None"
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "Medium",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            { "type": "TextBlock", "text": "5 小时", "isSubtle": true, "spacing": "None" },
+            { "type": "TextBlock", "text": "${fiveHourPercent}", "size": "ExtraLarge", "weight": "Bolder", "spacing": "None" },
+            { "type": "TextBlock", "text": "${fiveHourReset}", "size": "Small", "isSubtle": true, "spacing": "None", "wrap": true }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            { "type": "TextBlock", "text": "一周", "isSubtle": true, "spacing": "None" },
+            { "type": "TextBlock", "text": "${weeklyPercent}", "size": "ExtraLarge", "weight": "Bolder", "spacing": "None" },
+            { "type": "TextBlock", "text": "${weeklyReset}", "size": "Small", "isSubtle": true, "spacing": "None", "wrap": true }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "${status}",
+      "size": "Small",
+      "isSubtle": true,
+      "spacing": "Medium"
+    }
+  ],
+  "actions": [
+    { "type": "Action.Execute", "title": "刷新额度", "verb": "refresh" }
+  ]
+}

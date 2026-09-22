@@ -6,3 +6,8 @@
 *.cmd text eol=crlf
 *.ico binary
 *.exe binary
+*.png binary
+*.json text eol=lf
+*.csproj text eol=lf
+*.appxmanifest text eol=lf
+*.yml text eol=lf

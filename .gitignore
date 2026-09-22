@@ -4,6 +4,17 @@ settings.json
 *.log
 *.tmp
 *.pdb
+*.msix
+*.msixbundle
+*.appx
+*.appxbundle
+*.appinstaller
+*.cer
+*.pfx
+**/bin/
+**/obj/
+**/AppPackages/
+.vs/
 
 # Local captures and development artifacts
 previews/

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  IgnorableNamespaces="uap uap3 rescap">
+  <Identity Name="CodexQuotaWidget.Board" Publisher="CN=CodexQuotaWidgetDev" Version="0.1.0.0" />
+  <Properties>
+    <DisplayName>Codex 额度小组件</DisplayName>
+    <PublisherDisplayName>Codex Quota Widget Community</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+  <Resources><Resource Language="x-generate" /></Resources>
+  <Applications>
+    <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">
+      <uap:VisualElements
+        DisplayName="Codex 额度小组件"
+        Description="显示本机 Codex 的五小时与一周额度"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+        <uap:SplashScreen Image="Assets\SplashScreen.png" />
+      </uap:VisualElements>
+      <Extensions>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:ExeServer Executable="CodexQuotaBoard.exe" Arguments="-RegisterProcessAsComServer" DisplayName="Codex quota widget provider">
+              <com:Class Id="D5BEB174-EA45-4756-87B3-00768D27287D" DisplayName="Codex quota widget provider" />
+            </com:ExeServer>
+          </com:ComServer>
+        </com:Extension>
+        <uap3:Extension Category="windows.appExtension">
+          <uap3:AppExtension Name="com.microsoft.windows.widgets" DisplayName="Codex 额度" Id="codex.quota.board" PublicFolder="Public">
+            <uap3:Properties>
+              <WidgetProvider>
+                <ProviderIcons><Icon Path="Assets\StoreLogo.png" /></ProviderIcons>
+                <Activation><CreateInstance ClassId="D5BEB174-EA45-4756-87B3-00768D27287D" /></Activation>
+                <Definitions>
+                  <Definition Id="CodexQuotaWidget" DisplayName="Codex 额度" Description="五小时与一周剩余额度">
+                    <Capabilities><Capability>
+                      <Size Name="small" />
+                      <Size Name="medium" />
+                      <Size Name="large" />
+                    </Capability></Capabilities>
+                    <ThemeResources>
+                      <Icons><Icon Path="ProviderAssets\Quota_Icon.png" /></Icons>
+                      <Screenshots><Screenshot Path="ProviderAssets\Quota_Screenshot.png" DisplayAltText="五小时和一周剩余额度" /></Screenshots>
+                      <DarkMode />
+                      <LightMode />
+                    </ThemeResources>
+                  </Definition>
+                </Definitions>
+              </WidgetProvider>
+            </uap3:Properties>
+          </uap3:AppExtension>
+        </uap3:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

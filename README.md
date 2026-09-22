@@ -2,6 +2,8 @@
 
 一个常驻桌面的迷你小组件，显示 Codex 五小时和一周额度的剩余比例及恢复时间，并查看本机任务的 Token 用量。
 
+仓库还提供 [Windows 11 小组件面板适配](WindowsWidgets/README.md)：从任务栏天气入口进入小组件面板后，可固定额度卡片。它与桌面悬浮版分别安装和使用。
+
 ## 运行条件
 
 - Windows 10/11、Windows PowerShell 5.1。
