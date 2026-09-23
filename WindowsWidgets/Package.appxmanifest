@@ -6,7 +6,7 @@
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
   IgnorableNamespaces="uap uap3 rescap">
-  <Identity Name="CodexQuotaWidget.Board" Publisher="CN=CodexQuotaWidgetDev, OID.2.25.311729368913984317654407730594956997722=1" Version="0.1.1.0" />
+  <Identity Name="CodexQuotaWidget.Board" Publisher="CN=CodexQuotaWidgetDev, OID.2.25.311729368913984317654407730594956997722=1" Version="0.1.2.0" />
   <Properties>
     <DisplayName>Codex 额度小组件</DisplayName>
     <PublisherDisplayName>Codex Quota Widget Community</PublisherDisplayName>
@@ -45,11 +45,11 @@
                 <Activation><CreateInstance ClassId="D5BEB174-EA45-4756-87B3-00768D27287D" /></Activation>
                 <Definitions>
                   <Definition Id="CodexQuotaWidget" DisplayName="Codex 额度" Description="五小时与一周剩余额度">
-                    <Capabilities><Capability>
-                      <Size Name="small" />
-                      <Size Name="medium" />
-                      <Size Name="large" />
-                    </Capability></Capabilities>
+                    <Capabilities>
+                      <Capability><Size Name="small" /></Capability>
+                      <Capability><Size Name="medium" /></Capability>
+                      <Capability><Size Name="large" /></Capability>
+                    </Capabilities>
                     <ThemeResources>
                       <Icons><Icon Path="ProviderAssets\Quota_Icon.png" /></Icons>
                       <Screenshots><Screenshot Path="ProviderAssets\Quota_Screenshot.png" DisplayAltText="五小时和一周剩余额度" /></Screenshots>

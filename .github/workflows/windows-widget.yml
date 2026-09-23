@@ -31,5 +31,4 @@ jobs:
           name: codex-quota-board-unsigned
           path: |
             WindowsWidgets/**/CodexQuotaBoard_*.msix
-            WindowsWidgets/**/Dependencies/x64/Microsoft.WindowsAppRuntime.2.msix
           if-no-files-found: error
