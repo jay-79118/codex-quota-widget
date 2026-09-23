@@ -86,7 +86,15 @@ internal static class QuotaReader
             if (!process.Start()) return QuotaSnapshot.Error;
             process.StandardInput.AutoFlush = true;
             _ = process.StandardError.ReadToEndAsync();
-            await process.StandardInput.WriteLineAsync("{\"method\":\"initialize\",\"id\":1,\"params\":{\"clientInfo\":{\"name\":\"codex-quota-board\",\"version\":\"0.1.0\"}}");
+            await WriteMessageAsync(process, new
+            {
+                method = "initialize",
+                id = 1,
+                @params = new
+                {
+                    clientInfo = new { name = "codex-quota-board", version = "0.1.3" }
+                }
+            });
 
             while (true)
             {
@@ -102,8 +110,8 @@ internal static class QuotaReader
                     if (id.GetInt32() == 1)
                     {
                         if (root.TryGetProperty("error", out _)) return QuotaSnapshot.Error;
-                        await process.StandardInput.WriteLineAsync("{\"method\":\"initialized\",\"params\":{}}");
-                        await process.StandardInput.WriteLineAsync("{\"method\":\"account/rateLimits/read\",\"id\":2}");
+                        await WriteMessageAsync(process, new { method = "initialized", @params = new { } });
+                        await WriteMessageAsync(process, new { method = "account/rateLimits/read", id = 2 });
                     }
                     else if (id.GetInt32() == 2)
                     {
@@ -121,6 +129,9 @@ internal static class QuotaReader
             catch (Exception) { }
         }
     }
+
+    private static Task WriteMessageAsync(Process process, object message) =>
+        process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(message));
 
     private static string FindCodex()
     {

@@ -8,7 +8,7 @@
 
 本机开发需要 .NET 8 SDK、Visual Studio 2022 的 Windows 应用开发组件，以及 Windows App SDK。运行 `Generate-Assets.ps1` 可重新生成图标。仓库的 `Build Windows 11 widget` 工作流在 Windows runner 上构建未签名的 MSIX，供检查与测试。MSIX 内含 .NET 运行环境；Windows App Runtime 仍须已安装。
 
-这个 MSIX 是供 Windows 11 本机测试的未签名包，清单含微软要求的未签名标记。测试安装需用管理员 PowerShell 运行 `Add-AppxPackage -Path <MSIX 文件> -AllowUnsigned`；含可执行程序的未签名包会面向所有用户安装。正式分发应删除清单中的未签名标记，改用可信证书签名或通过 Microsoft Store 发布。公开发布前还需在真实 Windows 11 小组件面板中验证卡片的显示、固定、刷新和卸载。
+这个 MSIX 是供 Windows 11 本机测试的未签名包，清单含微软要求的未签名标记。测试前需要在“设置 → 系统 → 高级 → 开发人员选项”中启用开发人员模式，再用管理员 PowerShell 运行 `Add-AppxPackage -Path <MSIX 文件> -AllowUnsigned`；含可执行程序的未签名包会面向所有用户安装。正式分发应删除清单中的未签名标记，改用可信证书签名或通过 Microsoft Store 发布。公开发布前还需在真实 Windows 11 小组件面板中验证卡片的显示、固定、刷新和卸载。
 
 ## 数据与来源
 
