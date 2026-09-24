@@ -3,6 +3,8 @@ settings.json
 quota-cache.json
 task-cache.json
 board-quota-cache.json
+notice-events.jsonl*
+board-diagnostics.jsonl*
 *.lnk
 *.log
 *.tmp

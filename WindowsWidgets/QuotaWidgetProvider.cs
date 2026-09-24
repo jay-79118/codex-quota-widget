@@ -14,8 +14,10 @@ public sealed class QuotaWidgetProvider : IWidgetProvider
     private static readonly HashSet<string> Widgets = new();
     private static readonly SemaphoreSlim RefreshGate = new(1, 1);
     private static readonly ManualResetEvent LastWidgetRemoved = new(false);
-    private static readonly Timer RefreshTimer = new(_ => _ = RefreshAllAsync(), null,
+    private static readonly Timer RefreshTimer = new(_ => RequestRefresh("timer"), null,
         Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+    private static int refreshPending;
+    private static int consecutiveFailures;
     private static readonly string Template = File.ReadAllText(
         Path.Combine(AppContext.BaseDirectory, "Templates", "QuotaCard.json"));
     private static QuotaSnapshot? lastGood = QuotaSnapshot.LoadLastGood();
@@ -36,10 +38,13 @@ public sealed class QuotaWidgetProvider : IWidgetProvider
             }
             lock (Gate)
             {
-                if (Widgets.Count > 0) RefreshTimer.Change(TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+                if (Widgets.Count > 0) RefreshTimer.Change(TimeSpan.FromMinutes(1), Timeout.InfiniteTimeSpan);
             }
         }
-        catch (Exception error) { Trace.WriteLine(error); }
+        catch (Exception error)
+        {
+            QuotaDiagnostics.Record("recover", error.GetType().Name);
+        }
     }
 
     public void CreateWidget(WidgetContext context)
@@ -48,10 +53,10 @@ public sealed class QuotaWidgetProvider : IWidgetProvider
         lock (Gate)
         {
             Widgets.Add(context.Id);
-            RefreshTimer.Change(TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+            RefreshTimer.Change(TimeSpan.FromMinutes(1), Timeout.InfiniteTimeSpan);
         }
         SendUpdate(context.Id);
-        _ = RefreshAllAsync();
+        RequestRefresh("create");
     }
 
     public void DeleteWidget(string widgetId, string customState)
@@ -71,7 +76,7 @@ public sealed class QuotaWidgetProvider : IWidgetProvider
     {
         lock (Gate) Widgets.Add(context.Id);
         SendUpdate(context.Id);
-        _ = RefreshAllAsync();
+        RequestRefresh("activate");
     }
 
     public void Deactivate(string widgetId) { }
@@ -80,29 +85,69 @@ public sealed class QuotaWidgetProvider : IWidgetProvider
 
     public void OnActionInvoked(WidgetActionInvokedArgs args)
     {
-        if (args.Verb == "refresh") _ = RefreshAllAsync();
+        if (args.Verb == "refresh") RequestRefresh("manual");
     }
 
-    private static async Task RefreshAllAsync()
+    private static void RequestRefresh(string source)
+    {
+        if (source == "manual") QuotaDiagnostics.Record("refresh-request", "manual");
+        Interlocked.Exchange(ref refreshPending, 1);
+        _ = DrainRefreshAsync();
+    }
+
+    private static async Task DrainRefreshAsync()
     {
         if (!await RefreshGate.WaitAsync(0)) return;
         try
         {
+            while (Interlocked.Exchange(ref refreshPending, 0) != 0)
+                await RefreshOnceAsync();
+        }
+        finally
+        {
+            RefreshGate.Release();
+            if (Volatile.Read(ref refreshPending) != 0) _ = DrainRefreshAsync();
+        }
+    }
+
+    private static async Task RefreshOnceAsync()
+    {
+        var watch = Stopwatch.StartNew();
+        try
+        {
             var latest = await QuotaReader.ReadAsync();
-            if (latest == QuotaSnapshot.Error)
-                snapshot = lastGood?.AsStale("读取失败") ?? QuotaSnapshot.Error;
+            if (latest.FailureCode is string code)
+            {
+                snapshot = lastGood?.AsStale(latest.Status) ?? latest;
+                consecutiveFailures = Math.Min(consecutiveFailures + 1, 5);
+                QuotaDiagnostics.Record("read", code, watch.ElapsedMilliseconds);
+            }
             else
             {
                 snapshot = latest;
                 lastGood = latest;
                 latest.SaveLastGood();
+                consecutiveFailures = 0;
+                QuotaDiagnostics.Record("read", "ok", watch.ElapsedMilliseconds);
             }
             string[] ids;
             lock (Gate) ids = Widgets.ToArray();
             foreach (string id in ids) SendUpdate(id);
         }
-        catch (Exception error) { Trace.WriteLine(error); }
-        finally { RefreshGate.Release(); }
+        catch (Exception error)
+        {
+            consecutiveFailures = Math.Min(consecutiveFailures + 1, 5);
+            QuotaDiagnostics.Record("provider", error.GetType().Name, watch.ElapsedMilliseconds);
+        }
+        finally
+        {
+            int nextMinutes = consecutiveFailures == 0 ? 1 : Math.Min(16, 1 << consecutiveFailures);
+            lock (Gate)
+            {
+                if (Widgets.Count > 0)
+                    RefreshTimer.Change(TimeSpan.FromMinutes(nextMinutes), Timeout.InfiniteTimeSpan);
+            }
+        }
     }
 
     private static void SendUpdate(string id)
@@ -115,6 +160,9 @@ public sealed class QuotaWidgetProvider : IWidgetProvider
                 Data = snapshot.ToDataJson()
             });
         }
-        catch (Exception error) { Trace.WriteLine(error); }
+        catch (Exception error)
+        {
+            QuotaDiagnostics.Record("update", error.GetType().Name);
+        }
     }
 }

@@ -1,0 +1,49 @@
+name: Verify desktop widget
+
+on:
+  push:
+    paths:
+      - 'CodexQuotaWidget.ps1'
+      - 'CodexQuotaWidget.exe'
+      - 'CodexQuotaWidget.ico'
+      - 'WidgetLauncher.cs'
+      - 'data.js'
+      - 'build-exe.ps1'
+      - 'test/**'
+      - '.github/workflows/desktop-widget.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Test quota data and task cache
+        run: node --test test/data.test.js
+      - name: Test notification rules and diagnostics
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File test/notice.test.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File test/notice-log.test.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify checked-in EXE contains current source
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File test/embedded-resources.test.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build desktop EXE
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File build-exe.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codex-quota-desktop
+          path: CodexQuotaWidget.exe

@@ -24,6 +24,7 @@
 
 - 右键菜单可切换双圆环或跑道皮肤、十八种配色、50%～150% 无级大小，也可手动刷新、查看任务 Token 或退出。配色分为“时尚配色”和“简约配色”，各九组。
 - 右键“额度提醒”可启用或关闭系统通知，分别调整五小时和一周的低额度阈值，以及恢复前提醒时间。默认在剩余比例不高于 20%／10% 或恢复前 15 分钟提醒；每个五小时或一周额度窗口内，同类提醒只请求一次。恢复时间的小幅变化不会当作新窗口；额度回到 80% 以上，或进入下一个额度窗口后，会重新允许提醒。提醒由 Windows 通知区域图标发出，受系统通知设置影响，不占用任务栏的天气位置。
+- 通知触发记录保存在当前用户的 `%LOCALAPPDATA%\CodexQuotaWidget\notice-events.jsonl`，记录请求时间、额度类别、剩余比例、恢复时间和触发原因；不记录任务标题、会话内容或凭据。文件达到 64 KiB 时轮换为 `.old`，可在排查重复提醒后删除。
 - 悬停显示两档额度的剩余比例与恢复时间。按住并移动小组件可拖动位置。
 - 跑道中央两行依次显示五小时和一周信息；点击中央切换剩余比例与恢复时间。
 - 双圆环中央可点击打开任务 Token 详情。
@@ -55,7 +56,7 @@
 - `CodexQuotaWidget.exe`、`WidgetLauncher.cs`、`build-exe.ps1`：启动程序、源码和构建脚本。
 - `启动小组件.vbs`、`启动小组件.cmd`：无控制台启动入口。
 
-修改数据脚本后可运行 `node --test test/data.test.js`，验证额度百分比处理与本机会话缓存更新。修改提醒逻辑后可运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File test/notice.test.ps1`，验证跨窗口的通知去重。
+修改数据脚本后可运行 `node --test test/data.test.js`，验证额度百分比处理与本机会话缓存更新。修改提醒逻辑后可运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File test/notice.test.ps1` 和 `test/notice-log.test.ps1`，验证跨窗口去重与诊断记录。`test/embedded-resources.test.ps1` 核对仓库内 `.exe` 嵌入的脚本、数据文件和图标是否与源码一致；Windows CI 会运行这些检查并重新构建启动器。
 
 ## 已知限制
 

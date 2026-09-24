@@ -179,6 +179,14 @@ function quotaWindow(value) {
   };
 }
 
+function parseQuotaResponse(response) {
+  const limits = response?.rateLimitsByLimitId?.codex || response?.rateLimits || null;
+  const primary = quotaWindow(limits?.primary);
+  const secondary = quotaWindow(limits?.secondary);
+  if (!primary || !secondary) throw new Error('五小时或一周额度不完整');
+  return { primary, secondary, error: null };
+}
+
 function displayTitle(title, id) {
   const value = String(title || '');
   if (/密码|账号\s*[:：]|密钥|password|api[ _-]?key|secret/i.test(value)) {
@@ -190,15 +198,9 @@ function displayTitle(title, id) {
 async function main(mode = 'quota') {
   if (mode === 'quota') {
     const limitsResponse = await requestAppServer('account/rateLimits/read');
-    const limits = limitsResponse?.rateLimitsByLimitId?.codex ||
-      limitsResponse?.rateLimits || null;
     return {
       checkedAt: Date.now(),
-      quota: {
-        primary: quotaWindow(limits?.primary),
-        secondary: quotaWindow(limits?.secondary),
-        error: null,
-      },
+      quota: parseQuotaResponse(limitsResponse),
     };
   }
   if (mode === 'tasks') {
@@ -227,4 +229,4 @@ if (require.main === module) {
         error: error.message } })));
 }
 
-module.exports = { readTasks, quotaWindow };
+module.exports = { readTasks, quotaWindow, parseQuotaResponse };

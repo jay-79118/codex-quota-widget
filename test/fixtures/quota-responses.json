@@ -1,0 +1,27 @@
+{
+  "named": {
+    "rateLimitsByLimitId": {
+      "codex": {
+        "primary": { "usedPercent": 25, "resetsAt": 1790000000 },
+        "secondary": { "usedPercent": 60, "resetsAt": 1790500000 }
+      }
+    }
+  },
+  "fallback": {
+    "rateLimits": {
+      "primary": { "usedPercent": 110 },
+      "secondary": { "usedPercent": -5 }
+    }
+  },
+  "nullNamedFallback": {
+    "rateLimitsByLimitId": { "codex": null },
+    "rateLimits": {
+      "primary": { "usedPercent": 25, "resetsAt": "unknown" },
+      "secondary": { "usedPercent": 60 }
+    }
+  },
+  "missing": {},
+  "partial": { "rateLimits": { "primary": { "usedPercent": 20 } } },
+  "malformed": { "rateLimits": { "primary": "bad", "secondary": { "usedPercent": 42 } } },
+  "invalid": null
+}

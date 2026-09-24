@@ -5,13 +5,29 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { readTasks, quotaWindow } = require('../data.js');
+const { readTasks, quotaWindow, parseQuotaResponse } = require('../data.js');
+const quotaFixtures = JSON.parse(fs.readFileSync(
+  path.join(__dirname, 'fixtures', 'quota-responses.json'), 'utf8'));
 
 test('quota percentage is bounded and independent of task files', () => {
   assert.equal(quotaWindow({ usedPercent: 35 }).remainingPercent, 65);
   assert.equal(quotaWindow({ usedPercent: 120 }).remainingPercent, 0);
   assert.equal(quotaWindow({ usedPercent: NaN }), null);
   assert.equal(quotaWindow(null), null);
+});
+
+test('desktop and board quota readers share response fixtures', () => {
+  const named = parseQuotaResponse(quotaFixtures.named);
+  assert.equal(named.primary.remainingPercent, 75);
+  assert.equal(named.secondary.remainingPercent, 40);
+  assert.equal(named.primary.resetsAt, 1790000000);
+  const fallback = parseQuotaResponse(quotaFixtures.fallback);
+  assert.equal(fallback.primary.remainingPercent, 0);
+  assert.equal(fallback.secondary.remainingPercent, 100);
+  assert.equal(parseQuotaResponse(quotaFixtures.nullNamedFallback).primary.remainingPercent, 75);
+  for (const invalid of ['missing', 'partial', 'malformed', 'invalid']) {
+    assert.throws(() => parseQuotaResponse(quotaFixtures[invalid]), /额度不完整/);
+  }
 });
 
 test('task cache reuses unchanged sessions and invalidates changed files', () => {

@@ -31,6 +31,10 @@ $script:TrayIcon | Add-Member -MemberType ScriptMethod -Name ShowBalloonTip -Val
 }
 function Save-Settings { $script:SaveCount++ }
 function Reset-Text($value) { return [string]$value }
+function Write-NoticeEvent($eventName, $noticeId, $percent, $resetAt, $reason) {
+  $script:LoggedEvents += @{ event = $eventName; notice = $noticeId; reason = $reason }
+}
+$script:LoggedEvents = @()
 
 $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $data = @{ quota = @{ error = $null;
@@ -51,6 +55,9 @@ for ($i = 0; $i -lt 180; $i++) {
 if ($script:TrayIcon.Count -ne 1 -or
     $script:NoticeKeys.fiveLow -ne [string]$data.quota.primary.resetsAt) {
   throw 'Gradually changing reset time repeated a low-quota notice'
+}
+if (@($script:LoggedEvents | Where-Object { $_.event -eq 'requested' }).Count -ne 1) {
+  throw 'Diagnostic log repeated a low-quota request during reset drift'
 }
 $script:LastNoticeStateSaveAt = $now - 901
 $data.quota.primary.resetsAt += 60
@@ -89,4 +96,8 @@ if ($script:TrayIcon.Count -ne 6) { throw 'Reset-soon notice was not sent' }
 $data.quota.primary.resetsAt += 60
 Show-QuotaNotices $data
 if ($script:TrayIcon.Count -ne 6) { throw 'Reset-soon notice repeated after a small reset shift' }
+if (@($script:LoggedEvents | Where-Object { $_.event -eq 'requested' }).Count -ne 6 -or
+    @($script:LoggedEvents | Where-Object { $_.event -eq 'rearmed' }).Count -ne 1) {
+  throw 'Notification transition log does not match requested and rearmed events'
+}
 'Notification window deduplication passed'

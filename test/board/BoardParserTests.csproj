@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../WindowsWidgets/QuotaReader.cs" Link="QuotaReader.cs" />
+    <Compile Include="../../WindowsWidgets/QuotaWidgetProvider.cs" Link="QuotaWidgetProvider.cs" />
+    <Compile Include="../../WindowsWidgets/QuotaDiagnostics.cs" Link="QuotaDiagnostics.cs" />
+    <Content Include="../fixtures/quota-responses.json" Link="quota-responses.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../WindowsWidgets/Templates/QuotaCard.json" Link="Templates/QuotaCard.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

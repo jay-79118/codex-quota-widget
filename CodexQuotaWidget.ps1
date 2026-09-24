@@ -7,6 +7,7 @@ $script:DataScript = Join-Path $script:AppDirectory 'data.js'
 $script:IconPath = Join-Path $script:AppDirectory 'CodexQuotaWidget.ico'
 $script:SettingsPath = Join-Path $script:AppDirectory 'settings.json'
 $script:QuotaCachePath = Join-Path $script:AppDirectory 'quota-cache.json'
+$script:NoticeLogPath = Join-Path (Join-Path $env:LOCALAPPDATA 'CodexQuotaWidget') 'notice-events.jsonl'
 $script:Skin = 'ring'
 $script:Scale = 1.0
 $script:TrackMode = 'remaining'
@@ -138,7 +139,7 @@ if (-not $script:WidgetMutex.WaitOne(0)) { exit }
 [xml]$detailXaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Codex 任务 Token" Width="290" Height="360"
+        Title="Codex 本机任务 Token" Width="290" Height="360"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" Topmost="True" ShowInTaskbar="False"
         WindowStartupLocation="Manual" FontFamily="Microsoft YaHei UI">
@@ -148,7 +149,7 @@ if (-not $script:WidgetMutex.WaitOne(0)) { exit }
       <Grid.RowDefinitions><RowDefinition Height="35"/><RowDefinition Height="*"/><RowDefinition Height="29"/></Grid.RowDefinitions>
       <Grid Grid.Row="0">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-        <TextBlock x:Name="DetailDrag" Text="任务 Token" Foreground="#F0F5F9" FontSize="14" FontWeight="SemiBold" Cursor="SizeAll"/>
+        <TextBlock x:Name="DetailDrag" Text="任务 Token · 本机记录" Foreground="#F0F5F9" FontSize="14" FontWeight="SemiBold" Cursor="SizeAll"/>
         <Button x:Name="DetailRefresh" Grid.Column="1" Content="↻" Width="26" Height="25" Margin="0,0,5,0"
                 Background="#303B4B" Foreground="#DCE6F1" BorderThickness="0" Cursor="Hand"/>
         <Button x:Name="DetailClose" Grid.Column="2" Content="×" Width="26" Height="25"
@@ -379,12 +380,30 @@ function Save-NoticeState([long]$now) {
   } catch { }
 }
 
+function Write-NoticeEvent([string]$eventName, [string]$noticeId,
+    [double]$percent, [long]$resetAt, [string]$reason) {
+  if ($PreviewPath -or $env:CODEX_WIDGET_SELFTEST -eq '1') { return }
+  try {
+    $directory = Split-Path -Parent $script:NoticeLogPath
+    [IO.Directory]::CreateDirectory($directory) | Out-Null
+    if ([IO.File]::Exists($script:NoticeLogPath) -and
+        ([IO.FileInfo]::new($script:NoticeLogPath)).Length -ge 65536) {
+      Move-Item -LiteralPath $script:NoticeLogPath -Destination ($script:NoticeLogPath + '.old') -Force
+    }
+    $line = @{ utc = [DateTimeOffset]::UtcNow.ToString('O'); event = $eventName;
+      notice = $noticeId; remainingPercent = [Math]::Round($percent, 1);
+      resetsAt = $resetAt; reason = $reason } | ConvertTo-Json -Compress
+    [IO.File]::AppendAllText($script:NoticeLogPath, $line + "`n", [Text.UTF8Encoding]::new($false))
+  } catch { }
+}
+
 function Show-QuotaNotices($data) {
   if ($PreviewPath -or $env:CODEX_WIDGET_SELFTEST -eq '1' -or
       -not $script:NoticeEnabled -or -not $script:TrayIcon -or $data.quota.error) { return }
   $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
   $lines = New-Object System.Collections.Generic.List[string]
   $pending = @{}
+  $events = New-Object System.Collections.Generic.List[object]
   $rearmed = $false
   foreach ($window in @(
       @{ quota = $data.quota.primary; name = '5 小时额度'; lowId = 'fiveLow'; resetId = 'fiveReset'; threshold = $script:FiveHourThreshold; duration = 300 },
@@ -403,6 +422,7 @@ function Show-QuotaNotices($data) {
           $script:NoticeKeys.Remove($noticeId)
           $script:NoticeStateDirty = $true
           $rearmed = $true
+          Write-NoticeEvent 'rearmed' $noticeId $percent $resetAt 'quota-recovered'
         }
       }
     }
@@ -417,13 +437,17 @@ function Show-QuotaNotices($data) {
     $sameResetWindow = Test-ExistingNoticeWindow $window.resetId $resetAt $duration
     if ($window.threshold -gt 0 -and $percent -le $window.threshold -and
         -not $sameLowWindow) {
+      $reason = if ($script:NoticeKeys.ContainsKey($window.lowId)) { 'new-window' } else { 'first-or-rearmed' }
       $lines.Add(('{0}仅剩 {1:0}%（阈值 {2}%）' -f $window.name, $percent, $window.threshold))
       $pending[$window.lowId] = [string]$resetAt
+      $events.Add(@{ id = $window.lowId; percent = $percent; resetAt = $resetAt; reason = $reason })
     }
     if ($script:ResetSoonMinutes -gt 0 -and ($resetAt - $now) -le ($script:ResetSoonMinutes * 60) -and
         -not $sameResetWindow) {
+      $reason = if ($script:NoticeKeys.ContainsKey($window.resetId)) { 'new-window' } else { 'first-or-rearmed' }
       $lines.Add(('{0}将于 {1} 恢复' -f $window.name, (Reset-Text $resetAt)))
       $pending[$window.resetId] = [string]$resetAt
+      $events.Add(@{ id = $window.resetId; percent = $percent; resetAt = $resetAt; reason = $reason })
     }
   }
   if ($lines.Count -eq 0) {
@@ -435,10 +459,14 @@ function Show-QuotaNotices($data) {
   }
   foreach ($key in $pending.Keys) { $script:NoticeKeys[$key] = $pending[$key] }
   Save-NoticeState $now
+  $eventName = 'requested'
   try {
     $script:TrayIcon.ShowBalloonTip(10000, 'Codex 额度提醒', ($lines -join "`n"),
       [System.Windows.Forms.ToolTipIcon]::Info)
-  } catch { }
+  } catch { $eventName = 'api-failed' }
+  foreach ($entry in $events) {
+    Write-NoticeEvent $eventName $entry.id $entry.percent $entry.resetAt $entry.reason
+  }
 }
 
 function Color-Brush([string]$value) {
