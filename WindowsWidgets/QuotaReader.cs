@@ -9,11 +9,60 @@ internal sealed record QuotaSnapshot(
     string FiveHourReset,
     string WeeklyPercent,
     string WeeklyReset,
-    string Status)
+    string Status,
+    long CheckedAt = 0,
+    long FiveHourResetAt = 0,
+    long WeeklyResetAt = 0)
 {
     internal static QuotaSnapshot Loading { get; } = new("—", "正在读取", "—", "正在读取", "正在读取额度…");
 
     internal static QuotaSnapshot Error { get; } = new("—", "暂不可用", "—", "暂不可用", "读取失败，请点击刷新");
+
+    private static string CachePath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "CodexQuotaWidget", "board-quota-cache.json");
+
+    internal static QuotaSnapshot? LoadLastGood()
+    {
+        try
+        {
+            var saved = JsonSerializer.Deserialize<QuotaSnapshot>(File.ReadAllText(CachePath));
+            long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            return saved is { CheckedAt: > 0 } && saved.CheckedAt <= now + 60_000 ? saved : null;
+        }
+        catch (Exception) { return null; }
+    }
+
+    internal void SaveLastGood()
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(CachePath)!);
+            string temporary = CachePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(temporary, JsonSerializer.Serialize(this));
+                File.Move(temporary, CachePath, overwrite: true);
+            }
+            finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        }
+        catch (Exception) { /* Cache failure must not hide fresh quota data. */ }
+    }
+
+    internal QuotaSnapshot AsStale(string reason)
+    {
+        long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        string checkedTime = DateTimeOffset.FromUnixTimeMilliseconds(CheckedAt)
+            .ToLocalTime().ToString("M/d HH:mm", CultureInfo.CurrentCulture);
+        return this with
+        {
+            FiveHourPercent = FiveHourResetAt > now ? FiveHourPercent : "—",
+            FiveHourReset = FiveHourResetAt > now ? FiveHourReset : "恢复时间未知",
+            WeeklyPercent = WeeklyResetAt > now ? WeeklyPercent : "—",
+            WeeklyReset = WeeklyResetAt > now ? WeeklyReset : "恢复时间未知",
+            Status = reason + " · 上次 " + checkedTime
+        };
+    }
 
     internal string ToDataJson() => JsonSerializer.Serialize(new
     {
@@ -39,27 +88,35 @@ internal sealed record QuotaSnapshot(
             (!limits.TryGetProperty("primary", out _) &&
              !limits.TryGetProperty("secondary", out _))) return Error;
 
-        var (fivePercent, fiveReset) = ReadWindow(limits, "primary");
-        var (weekPercent, weekReset) = ReadWindow(limits, "secondary");
+        var (fivePercent, fiveReset, fiveResetAt) = ReadWindow(limits, "primary");
+        var (weekPercent, weekReset, weekResetAt) = ReadWindow(limits, "secondary");
+        if (fivePercent == "—" || weekPercent == "—") return Error;
         return new(fivePercent, fiveReset, weekPercent, weekReset,
-            DateTime.Now.ToString("HH:mm", CultureInfo.CurrentCulture) + " 更新");
+            DateTime.Now.ToString("HH:mm", CultureInfo.CurrentCulture) + " 更新",
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), fiveResetAt, weekResetAt);
     }
 
-    private static (string Percent, string Reset) ReadWindow(JsonElement limits, string name)
+    private static (string Percent, string Reset, long ResetAt) ReadWindow(JsonElement limits, string name)
     {
         if (limits.ValueKind != JsonValueKind.Object ||
             !limits.TryGetProperty(name, out var window) ||
             !window.TryGetProperty("usedPercent", out var used) ||
-            !used.TryGetDouble(out var usedValue)) return ("—", "恢复时间未知");
+            !used.TryGetDouble(out var usedValue) || !double.IsFinite(usedValue))
+            return ("—", "恢复时间未知", 0);
 
         string percent = Math.Clamp(100 - usedValue, 0, 100).ToString("0", CultureInfo.InvariantCulture) + "%";
         string reset = "恢复时间未知";
+        long resetAt = 0;
         if (window.TryGetProperty("resetsAt", out var epoch) && epoch.TryGetInt64(out long seconds))
         {
-            try { reset = DateTimeOffset.FromUnixTimeSeconds(seconds).ToLocalTime().ToString("M/d HH:mm"); }
+            try
+            {
+                reset = DateTimeOffset.FromUnixTimeSeconds(seconds).ToLocalTime().ToString("M/d HH:mm");
+                resetAt = seconds;
+            }
             catch (ArgumentOutOfRangeException) { }
         }
-        return (percent, reset);
+        return (percent, reset, resetAt);
     }
 }
 
@@ -92,7 +149,7 @@ internal static class QuotaReader
                 id = 1,
                 @params = new
                 {
-                    clientInfo = new { name = "codex-quota-board", version = "0.1.3" }
+                    clientInfo = new { name = "codex-quota-board", version = "0.1.4" }
                 }
             });
 

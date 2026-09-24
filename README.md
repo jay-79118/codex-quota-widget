@@ -12,7 +12,7 @@
 
 ## 使用
 
-只需下载 `CodexQuotaWidget.exe` 并双击启动。若要直接运行源码，则把 `CodexQuotaWidget.ps1`、`data.js` 和 `CodexQuotaWidget.ico` 放在同一文件夹，再使用 `启动小组件.vbs` 或 `启动小组件.cmd`。启动器会隐藏 PowerShell 控制台；小组件和通知区域仍可访问。首次读取通常需要数秒，之后每 60 秒刷新。重复启动不会创建第二个小组件。
+只需下载 `CodexQuotaWidget.exe` 并双击启动。若要直接运行源码，则把 `CodexQuotaWidget.ps1`、`data.js` 和 `CodexQuotaWidget.ico` 放在同一文件夹，再使用 `启动小组件.vbs` 或 `启动小组件.cmd`。启动器会隐藏 PowerShell 控制台；小组件和通知区域仍可访问。首次读取通常需要数秒，之后每 60 秒只刷新额度。任务 Token 在打开详情时读取，五分钟内重复打开会复用结果；重复启动不会创建第二个小组件。
 
 `.exe` 已内置小组件脚本、数据脚本和图标，可以单独下载。首次运行会将这些文件放在当前用户的 `%LOCALAPPDATA%\CodexQuotaWidget` 文件夹，设置也保存在那里；不会修改系统安装。额度查询仍依赖已安装的 Codex 和 Node.js。可用 Windows PowerShell 5.1 运行 `build-exe.ps1`，从 `WidgetLauncher.cs` 和同目录源码重新编译。
 
@@ -27,6 +27,7 @@
 - 悬停显示两档额度的剩余比例与恢复时间。按住并移动小组件可拖动位置。
 - 跑道中央两行依次显示五小时和一周信息；点击中央切换剩余比例与恢复时间。
 - 双圆环中央可点击打开任务 Token 详情。
+- 额度读取失败时会显示尚未恢复的上次成功值，并以橙色感叹号标记旧数据；悬停可查看错误和上次成功时间。额度窗口恢复时间已过的缓存不会继续显示百分比。
 
 ## 配色预览
 
@@ -40,7 +41,7 @@
 
 ## 数据与隐私
 
-额度通过本机 Codex `app-server` 接口获取。任务 Token 从当前 Windows 用户的 `~/.codex/sessions` 会话文件读取，仅代表本机记录，其他设备的任务可能缺失。程序不会自行上传任务标题或会话文件，也不需要额外 API 密钥；Codex 获取额度时仍可能访问自己的服务。
+额度通过本机 Codex `app-server` 接口获取。任务 Token 从当前 Windows 用户的 `~/.codex/sessions` 会话文件读取，仅代表本机记录，其他设备的任务可能缺失。任务详情仅在打开时读取，未变化会话的 Token 统计缓存在当前用户的 `%LOCALAPPDATA%\CodexQuotaWidget\task-cache.json`，不缓存任务标题；上次成功的额度保存在小组件脚本同目录的 `quota-cache.json`。这些本地缓存可删除，重启后会重新生成。程序不会自行上传任务标题或会话文件，也不需要额外 API 密钥；Codex 获取额度时仍可能访问自己的服务。
 
 任务标题仅对少数明显包含“密码”“密钥”等字样的内容做遮盖，**不能保证所有私人标题都会自动隐藏**。录屏或分享截图前请检查任务详情。`settings.json` 是运行时生成的个人偏好文件，包含提醒阈值和去重记录，不应提交到公开仓库。
 
@@ -53,6 +54,8 @@
 - `CodexQuotaWidget.ico`：通知区域图标。
 - `CodexQuotaWidget.exe`、`WidgetLauncher.cs`、`build-exe.ps1`：启动程序、源码和构建脚本。
 - `启动小组件.vbs`、`启动小组件.cmd`：无控制台启动入口。
+
+修改数据脚本后可运行 `node --test test/data.test.js`，验证额度百分比处理与本机会话缓存更新。
 
 ## 已知限制
 

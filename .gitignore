@@ -1,5 +1,8 @@
 # Personal runtime state and machine-specific launchers
 settings.json
+quota-cache.json
+task-cache.json
+board-quota-cache.json
 *.lnk
 *.log
 *.tmp

@@ -18,7 +18,8 @@ public sealed class QuotaWidgetProvider : IWidgetProvider
         Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
     private static readonly string Template = File.ReadAllText(
         Path.Combine(AppContext.BaseDirectory, "Templates", "QuotaCard.json"));
-    private static QuotaSnapshot snapshot = QuotaSnapshot.Loading;
+    private static QuotaSnapshot? lastGood = QuotaSnapshot.LoadLastGood();
+    private static QuotaSnapshot snapshot = lastGood?.AsStale("正在更新") ?? QuotaSnapshot.Loading;
 
     public QuotaWidgetProvider() => RecoverWidgets();
 
@@ -87,7 +88,15 @@ public sealed class QuotaWidgetProvider : IWidgetProvider
         if (!await RefreshGate.WaitAsync(0)) return;
         try
         {
-            snapshot = await QuotaReader.ReadAsync();
+            var latest = await QuotaReader.ReadAsync();
+            if (latest == QuotaSnapshot.Error)
+                snapshot = lastGood?.AsStale("读取失败") ?? QuotaSnapshot.Error;
+            else
+            {
+                snapshot = latest;
+                lastGood = latest;
+                latest.SaveLastGood();
+            }
             string[] ids;
             lock (Gate) ids = Widgets.ToArray();
             foreach (string id in ids) SendUpdate(id);

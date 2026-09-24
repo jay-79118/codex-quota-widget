@@ -6,6 +6,8 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 
 const ROOT = path.join(os.homedir(), '.codex', 'sessions');
+const TASK_CACHE = path.join(process.env.LOCALAPPDATA || os.tmpdir(),
+  'CodexQuotaWidget', 'task-cache.json');
 
 function findCodex() {
   const binRoot = path.join(process.env.LOCALAPPDATA || '', 'OpenAI', 'Codex', 'bin');
@@ -20,26 +22,24 @@ function findCodex() {
   return 'codex';
 }
 
-function requestAppServer() {
+function requestAppServer(method, params, timeoutMs = 9000) {
   return new Promise((resolve, reject) => {
     const child = spawn(findCodex(), ['app-server', '--stdio'], {
       stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
     });
     let buffer = '';
     let errorText = '';
-    let limits;
-    let threads;
     let finished = false;
-    const timer = setTimeout(() => finish(new Error('Codex 接口响应超时')), 9000);
+    const timer = setTimeout(() => finish(new Error('Codex 接口响应超时')), timeoutMs);
 
-    function finish(error) {
+    function finish(error, result) {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
       child.stdin.end();
       child.kill();
       if (error) reject(error);
-      else resolve({ limits, threads });
+      else resolve(result);
     }
 
     child.on('error', error => finish(error));
@@ -61,16 +61,11 @@ function requestAppServer() {
         if (response.id === 1) {
           if (response.error) return finish(new Error(response.error.message || '初始化失败'));
           child.stdin.write(JSON.stringify({ method: 'initialized', params: {} }) + '\n');
-          child.stdin.write(JSON.stringify({ method: 'account/rateLimits/read', id: 2 }) + '\n');
-          child.stdin.write(JSON.stringify({ method: 'thread/list', id: 3,
-            params: { limit: 200, sortKey: 'updated_at' } }) + '\n');
+          child.stdin.write(JSON.stringify({ method, id: 2, params }) + '\n');
         } else if (response.id === 2) {
-          limits = response.result || null;
-          if (response.error) limits = { error: response.error.message || '额度读取失败' };
-        } else if (response.id === 3) {
-          threads = response.result?.data || [];
+          if (response.error) return finish(new Error(response.error.message || 'Codex 接口读取失败'));
+          finish(null, response.result || null);
         }
-        if (limits !== undefined && threads !== undefined) finish();
       }
     });
     child.stdin.write(JSON.stringify({ method: 'initialize', id: 1,
@@ -123,41 +118,59 @@ function latestTokenEvent(file, size) {
   return null;
 }
 
-function readTasks(threadRows) {
-  const names = new Map();
-  for (const row of threadRows || []) {
-    if (row?.id && row?.name && !names.has(row.id)) names.set(row.id, row.name);
-  }
+function readTasks(root = ROOT, cachePath = TASK_CACHE) {
+  let cache = { version: 1, files: {} };
+  try {
+    const saved = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+    if (saved.version === 1 && saved.files && typeof saved.files === 'object') cache = saved;
+  } catch { /* A missing or damaged cache is rebuilt from session files. */ }
+  const nextFiles = {};
+  let changed = false;
   const tasks = new Map();
-  for (const file of listSessionFiles(ROOT)) {
-    let meta;
-    try { meta = JSON.parse(readHeadLine(file.path)); } catch { continue; }
-    const id = meta?.type === 'session_meta' ? meta.payload?.id : null;
-    if (!id) continue;
-    let usage;
-    try { usage = latestTokenEvent(file.path, file.size); } catch { continue; }
-    if (!usage) continue;
-    const previous = tasks.get(id);
-    const total = Number(usage.total_tokens || 0);
+  for (const file of listSessionFiles(root)) {
+    const key = path.relative(root, file.path);
+    let entry = cache.files[key];
+    if (!entry || entry.size !== file.size || entry.modified !== file.modified) {
+      let id = null;
+      let usage = null;
+      try {
+        const meta = JSON.parse(readHeadLine(file.path));
+        id = meta?.type === 'session_meta' ? meta.payload?.id : null;
+        if (id) usage = latestTokenEvent(file.path, file.size);
+      } catch { /* An incomplete session is retried after it changes. */ }
+      entry = { size: file.size, modified: file.modified, id, usage };
+      changed = true;
+    }
+    nextFiles[key] = entry;
+    if (!entry.id || !entry.usage) continue;
+    const previous = tasks.get(entry.id);
+    const total = Number(entry.usage.total_tokens || 0);
     if (!previous || total > previous.totalTokens ||
         (total === previous.totalTokens && file.modified > previous.modified)) {
-      tasks.set(id, {
-        id,
-        title: names.get(id) || `任务 ${new Date(file.modified).toLocaleDateString('zh-CN')}`,
+      tasks.set(entry.id, {
+        id: entry.id,
+        title: `任务 ${new Date(file.modified).toLocaleDateString('zh-CN')}`,
         totalTokens: total,
-        inputTokens: Number(usage.input_tokens || 0),
-        cachedInputTokens: Number(usage.cached_input_tokens || 0),
-        outputTokens: Number(usage.output_tokens || 0),
-        reasoningOutputTokens: Number(usage.reasoning_output_tokens || 0),
+        inputTokens: Number(entry.usage.input_tokens || 0),
+        cachedInputTokens: Number(entry.usage.cached_input_tokens || 0),
+        outputTokens: Number(entry.usage.output_tokens || 0),
+        reasoningOutputTokens: Number(entry.usage.reasoning_output_tokens || 0),
         modified: file.modified,
       });
     }
+  }
+  if (Object.keys(nextFiles).length !== Object.keys(cache.files).length) changed = true;
+  if (changed) {
+    try {
+      fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+      fs.writeFileSync(cachePath, JSON.stringify({ version: 1, files: nextFiles }));
+    } catch { /* Token details remain usable when the cache cannot be saved. */ }
   }
   return [...tasks.values()].sort((a, b) => b.modified - a.modified);
 }
 
 function quotaWindow(value) {
-  if (!value || typeof value.usedPercent !== 'number') return null;
+  if (!value || !Number.isFinite(value.usedPercent)) return null;
   return {
     usedPercent: Math.min(100, Math.max(0, value.usedPercent)),
     remainingPercent: Math.min(100, Math.max(0, 100 - value.usedPercent)),
@@ -174,30 +187,44 @@ function displayTitle(title, id) {
   return value.slice(0, 100);
 }
 
-(async () => {
-  let account;
-  let quotaError = null;
-  try { account = await requestAppServer(); }
-  catch (error) { quotaError = error.message; }
-  const limits = account?.limits?.rateLimitsByLimitId?.codex ||
-    account?.limits?.rateLimits || null;
-  if (account?.limits?.error) quotaError = account.limits.error;
-  const output = {
-    checkedAt: Date.now(),
-    quota: {
-      primary: quotaWindow(limits?.primary),
-      secondary: quotaWindow(limits?.secondary),
-      error: quotaError,
-    },
-    tasks: readTasks(account?.threads).map(task => ({
-      ...task,
-      title: displayTitle(task.title, task.id),
-    })),
-  };
-  process.stdout.write(JSON.stringify(output));
-})().catch(error => {
-  process.stdout.write(JSON.stringify({
-    checkedAt: Date.now(), quota: { primary: null, secondary: null,
-      error: error.message }, tasks: [],
-  }));
-});
+async function main(mode = 'quota') {
+  if (mode === 'quota') {
+    const limitsResponse = await requestAppServer('account/rateLimits/read');
+    const limits = limitsResponse?.rateLimitsByLimitId?.codex ||
+      limitsResponse?.rateLimits || null;
+    return {
+      checkedAt: Date.now(),
+      quota: {
+        primary: quotaWindow(limits?.primary),
+        secondary: quotaWindow(limits?.secondary),
+        error: null,
+      },
+    };
+  }
+  if (mode === 'tasks') {
+    const namesRequest = requestAppServer('thread/list',
+      { limit: 200, sortKey: 'updated_at' }, 6000).catch(() => null);
+    const tasks = readTasks();
+    const names = new Map();
+    for (const row of (await namesRequest)?.data || []) {
+      if (row?.id && row?.name && !names.has(row.id)) names.set(row.id, row.name);
+    }
+    return {
+      checkedAt: Date.now(),
+      tasks: tasks.map(task => ({ ...task,
+        title: displayTitle(names.get(task.id) || task.title, task.id) })),
+    };
+  }
+  throw new Error('未知读取模式');
+}
+
+if (require.main === module) {
+  const mode = process.argv[2] || 'quota';
+  main(mode).then(output => process.stdout.write(JSON.stringify(output)))
+    .catch(error => process.stdout.write(JSON.stringify(mode === 'tasks'
+      ? { checkedAt: Date.now(), tasks: [], error: error.message }
+      : { checkedAt: Date.now(), quota: { primary: null, secondary: null,
+        error: error.message } })));
+}
+
+module.exports = { readTasks, quotaWindow };

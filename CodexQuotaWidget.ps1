@@ -6,6 +6,7 @@ $script:AppDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:DataScript = Join-Path $script:AppDirectory 'data.js'
 $script:IconPath = Join-Path $script:AppDirectory 'CodexQuotaWidget.ico'
 $script:SettingsPath = Join-Path $script:AppDirectory 'settings.json'
+$script:QuotaCachePath = Join-Path $script:AppDirectory 'quota-cache.json'
 $script:Skin = 'ring'
 $script:Scale = 1.0
 $script:TrackMode = 'remaining'
@@ -15,6 +16,11 @@ $script:FiveHourThreshold = 20
 $script:WeekThreshold = 10
 $script:ResetSoonMinutes = 15
 $script:NoticeKeys = @{}
+$script:QuotaStatus = '额度读取中'
+$script:TaskStatus = '任务未读取'
+$script:TasksLastCheckedAt = 0
+$script:LastGoodQuota = $null
+$script:LastGoodCheckedAt = 0
 $script:FashionPaletteOrder = @('runway','cocoa','oxygen','cloud','rouge','terracotta','poseidon','foxglove','fuchsia')
 $script:PaletteOrder = @('sea','dusk','moss','ink','midnight','mono','cream','frost','clay')
 $script:Palettes = @{
@@ -98,6 +104,10 @@ if (-not $script:WidgetMutex.WaitOne(0)) { exit }
           <TextBlock x:Name="OuterText" Text="—" Foreground="#E7FFF7" FontSize="15" FontWeight="Bold" TextAlignment="Center"/>
           <TextBlock x:Name="InnerText" Text="周 —" Foreground="#AFCBFF" FontSize="8.5" TextAlignment="Center"/>
         </StackPanel>
+        <Border x:Name="RingStale" Width="13" Height="13" CornerRadius="6.5" Background="#F2AF58"
+                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,10,0" Visibility="Collapsed">
+          <TextBlock Text="!" Foreground="#35240E" FontSize="9" FontWeight="Bold" TextAlignment="Center"/>
+        </Border>
       </Grid>
     </Viewbox>
     <Viewbox x:Name="TrackView" Stretch="Fill" Visibility="Collapsed">
@@ -113,6 +123,10 @@ if (-not $script:WidgetMutex.WaitOne(0)) { exit }
           <TextBlock x:Name="TrackLine1" Text="5小时 —" Foreground="#E8FFF7" FontSize="9.4" FontWeight="SemiBold" TextAlignment="Center"/>
           <TextBlock x:Name="TrackLine2" Text="一周 —" Foreground="#AFCBFF" FontSize="9.4" FontWeight="SemiBold" TextAlignment="Center"/>
         </StackPanel>
+        <Border x:Name="TrackStale" Width="9" Height="9" CornerRadius="4.5" Background="#F2AF58"
+                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,7,8,0" Visibility="Collapsed">
+          <TextBlock Text="!" Foreground="#35240E" FontSize="7" FontWeight="Bold" TextAlignment="Center"/>
+        </Border>
       </Grid>
     </Viewbox>
   </Grid>
@@ -158,18 +172,18 @@ if (Test-Path -LiteralPath $script:IconPath) {
 }
 foreach ($name in @('RingView','TrackView','RingSurface','RingOuterBase','RingInnerBase',
   'TrackSurface','TrackOuterBase','TrackInnerBase','OuterFull','OuterArc','InnerFull','InnerArc',
-  'OuterText','InnerText','TrackOuterArc','TrackInnerArc','TrackLine1','TrackLine2')) {
+  'OuterText','InnerText','TrackOuterArc','TrackInnerArc','TrackLine1','TrackLine2','RingStale','TrackStale')) {
   Set-Variable -Scope Script -Name $name -Value $script:Mini.FindName($name)
 }
 foreach ($name in @('DetailSurface','DetailDrag','DetailRefresh','DetailClose','TaskList','DetailStatus')) {
   Set-Variable -Scope Script -Name $name -Value $script:Detail.FindName($name)
 }
 
-function Start-DataProcess {
+function Start-DataProcess([string]$mode = 'quota') {
   if (-not (Test-Path -LiteralPath $script:NodePath)) { throw '未找到 Node.js' }
   $start = New-Object System.Diagnostics.ProcessStartInfo
   $start.FileName = $script:NodePath
-  $start.Arguments = '"' + $script:DataScript + '"'
+  $start.Arguments = '"' + $script:DataScript + '" ' + $mode
   $start.WorkingDirectory = $script:AppDirectory
   $start.UseShellExecute = $false
   $start.CreateNoWindow = $true
@@ -196,7 +210,7 @@ function Read-Data {
       )
     } | ConvertTo-Json -Depth 6 | ConvertFrom-Json)
   }
-  $process = Start-DataProcess
+  $process = Start-DataProcess 'quota'
   try {
     $outputTask = $process.StandardOutput.ReadToEndAsync()
     $errorTask = $process.StandardError.ReadToEndAsync()
@@ -301,6 +315,44 @@ function Save-Settings {
      weekThreshold = $script:WeekThreshold; resetSoonMinutes = $script:ResetSoonMinutes;
      noticeKeys = $script:NoticeKeys } | ConvertTo-Json -Compress |
     Set-Content -LiteralPath $script:SettingsPath -Encoding UTF8
+}
+
+function Load-QuotaCache {
+  if (-not (Test-Path -LiteralPath $script:QuotaCachePath)) { return }
+  try {
+    $saved = Get-Content -LiteralPath $script:QuotaCachePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $now = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+    if ([long]$saved.checkedAt -le 0 -or [long]$saved.checkedAt -gt ($now + 60000) -or
+        -not $saved.quota) { return }
+    $script:LastGoodQuota = $saved.quota
+    $script:LastGoodCheckedAt = [long]$saved.checkedAt
+  } catch { }
+}
+
+function Save-QuotaCache {
+  if ($PreviewPath -or $env:CODEX_WIDGET_SELFTEST -eq '1') { return }
+  try {
+    @{ checkedAt = $script:LastGoodCheckedAt; quota = @{
+        primary = $script:LastGoodQuota.primary; secondary = $script:LastGoodQuota.secondary
+      } } | ConvertTo-Json -Depth 6 -Compress |
+      Set-Content -LiteralPath $script:QuotaCachePath -Encoding UTF8
+  } catch { }
+}
+
+function Get-CachedWindow($window) {
+  if (-not $window) { return $null }
+  try {
+    if ($null -eq $window.remainingPercent -or $null -eq $window.resetsAt) { return $null }
+    $percent = [double]$window.remainingPercent
+    $resetAt = [long]$window.resetsAt
+    if ([double]::IsNaN($percent) -or $percent -lt 0 -or $percent -gt 100 -or
+        $resetAt -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) { return $null }
+    return $window
+  } catch { return $null }
+}
+
+function Update-DetailStatus {
+  $script:DetailStatus.Text = $script:QuotaStatus + ' · ' + $script:TaskStatus
 }
 
 function Show-QuotaNotices($data) {
@@ -411,7 +463,14 @@ function Add-Task($task) {
 
 function Render-Tasks {
   $script:TaskList.Children.Clear()
-  if ($null -eq $script:CurrentTasks) { return }
+  if ($null -eq $script:CurrentTasks) {
+    $hint = New-Object Windows.Controls.TextBlock
+    $hint.Text = if ($script:TaskStatus -eq '任务读取失败') { '读取失败，点击右上角重试' } else { '正在读取本机任务…' }
+    $hint.Foreground = Color-Brush $script:Palette.Muted
+    [void]$script:TaskList.Children.Add($hint)
+    $script:TasksDirty = $false
+    return
+  }
   foreach ($task in $script:CurrentTasks) { Add-Task $task }
   if (@($script:CurrentTasks).Count -eq 0) {
     $empty = New-Object Windows.Controls.TextBlock
@@ -420,6 +479,28 @@ function Render-Tasks {
     [void]$script:TaskList.Children.Add($empty)
   }
   $script:TasksDirty = $false
+}
+
+function Apply-Tasks($data) {
+  if ($data.error) { Show-TaskReadError ([string]$data.error); return }
+  if ($null -eq $data.tasks) { Show-TaskReadError '任务数据格式异常'; return }
+  $signature = ConvertTo-Json -InputObject $data.tasks -Depth 4 -Compress
+  if ($signature -ne $script:TaskSignature) {
+    $script:CurrentTasks = @($data.tasks)
+    $script:TaskSignature = $signature
+    $script:TasksDirty = $true
+    if ($script:Detail.IsVisible) { Render-Tasks }
+  }
+  $script:TasksLastCheckedAt = [long]$data.checkedAt
+  $script:TaskStatus = ('{0} 个本机任务' -f @($script:CurrentTasks).Count)
+  Update-DetailStatus
+}
+
+function Show-TaskReadError([string]$message) {
+  $script:TaskStatus = if ($null -eq $script:CurrentTasks) { '任务读取失败' } else { '任务旧数据' }
+  $script:DetailStatus.ToolTip = '任务读取失败：' + $message
+  Update-DetailStatus
+  if ($null -eq $script:CurrentTasks -and $script:Detail.IsVisible) { Render-Tasks }
 }
 
 function Apply-Palette([string]$paletteId, [bool]$save) {
@@ -458,8 +539,21 @@ function Apply-Palette([string]$paletteId, [bool]$save) {
 
 function Apply-Data($data) {
   try {
-    $short = $data.quota.primary
-    $week = $data.quota.secondary
+    $errorText = [string]$data.quota.error
+    $fresh = -not $errorText -and $data.quota.primary -and $data.quota.secondary
+    if (-not $fresh -and -not $errorText) { $errorText = '额度数据不完整' }
+    if ($fresh) {
+      $short = $data.quota.primary
+      $week = $data.quota.secondary
+      $script:LastGoodQuota = $data.quota
+      $script:LastGoodCheckedAt = if ($data.checkedAt) { [long]$data.checkedAt } else {
+        [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+      }
+      Save-QuotaCache
+    } else {
+      $short = Get-CachedWindow $script:LastGoodQuota.primary
+      $week = Get-CachedWindow $script:LastGoodQuota.secondary
+    }
     $script:ShortQuota = $short
     $script:WeekQuota = $week
     if ($short) {
@@ -481,47 +575,46 @@ function Apply-Data($data) {
       Set-TrackArc $script:TrackInnerArc 0 100 18
     }
     Update-TrackText
-    $script:Mini.ToolTip = ("外环：5 小时剩余 {0}，{1} 重置`n内环：一周剩余 {2}，{3} 重置" -f
+    $tooltip = ("外环：5 小时剩余 {0}，{1} 重置`n内环：一周剩余 {2}，{3} 重置" -f
       $(if ($short) { '{0:0}%' -f [double]$short.remainingPercent } else { '未知' }),
       (Reset-Text $short.resetsAt),
       $(if ($week) { '{0:0}%' -f [double]$week.remainingPercent } else { '未知' }),
       (Reset-Text $week.resetsAt))
-    $taskSignature = ConvertTo-Json -InputObject $data.tasks -Depth 4 -Compress
-    if ($taskSignature -ne $script:TaskSignature) {
-      $script:CurrentTasks = @($data.tasks)
-      $script:TaskSignature = $taskSignature
-      $script:TasksDirty = $true
-      if ($script:Detail.IsVisible) { Render-Tasks }
+    $script:RingStale.Visibility = if ($fresh) { 'Collapsed' } else { 'Visible' }
+    $script:TrackStale.Visibility = $script:RingStale.Visibility
+    if ($fresh) {
+      $script:QuotaStatus = ('额度 {0} 更新' -f [DateTime]::Now.ToString('HH:mm'))
+      $script:DetailStatus.ToolTip = $null
+    } else {
+      $lastTime = if ($script:LastGoodCheckedAt -gt 0) {
+        [DateTimeOffset]::FromUnixTimeMilliseconds($script:LastGoodCheckedAt).ToLocalTime().ToString('M/d HH:mm')
+      } else { '未知' }
+      $tooltip = ("{0}`n上次成功更新：{1}`n{2}" -f $errorText, $lastTime, $tooltip)
+      $script:QuotaStatus = if ($short -or $week) { '旧额度 ' + $lastTime } else { '额度读取失败' }
+      $script:DetailStatus.ToolTip = $tooltip
     }
-    $status = '{0} 更新 · {1} 个本机任务' -f [DateTime]::Now.ToString('HH:mm'), @($data.tasks).Count
-    if ($data.quota.error) { $status += ' · 额度暂不可用' }
-    $script:DetailStatus.Text = $status
+    $script:Mini.ToolTip = $tooltip
     if ($script:TrayIcon) {
-      $script:TrayIcon.Text = ('Codex 额度  5小时 {0}  一周 {1}' -f (Quota-Percent $short), (Quota-Percent $week))
+      $script:TrayIcon.Text = ('Codex 额度{0}  5小时 {1}  一周 {2}' -f
+        $(if ($fresh) { '' } else { '（旧）' }), (Quota-Percent $short), (Quota-Percent $week))
     }
-    Show-QuotaNotices $data
-  } catch { Show-ReadError $_.Exception.Message }
+    if ($null -ne $data.PSObject.Properties['tasks']) { Apply-Tasks $data }
+    Update-DetailStatus
+    if ($fresh) { Show-QuotaNotices $data }
+  } catch { $script:DetailStatus.Text = ('显示失败：{0}' -f $_.Exception.Message) }
 }
 
 function Show-ReadError([string]$message) {
-    $script:OuterText.Text = '—'
-    $script:InnerText.Text = '周 —'
-    Set-Arc $script:OuterArc $script:OuterFull 0 43
-    Set-Arc $script:InnerArc $script:InnerFull 0 31
-    Set-TrackArc $script:TrackOuterArc 0 120 27
-    Set-TrackArc $script:TrackInnerArc 0 100 18
-    $script:TrackLine1.Text = '5小时 —'
-    $script:TrackLine2.Text = '一周 —'
-    $script:Mini.ToolTip = '读取失败，右键刷新'
-    $script:DetailStatus.Text = ('读取失败：{0}' -f $message)
-    if ($script:TrayIcon) { $script:TrayIcon.Text = 'Codex 额度 · 读取失败' }
+  Apply-Data (@{ checkedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds();
+      quota = @{ primary = $null; secondary = $null; error = $message } })
 }
 
 function Refresh-Data {
   if ($script:ReadProcess) { return }
-  $script:DetailStatus.Text = '正在读取…'
+  $script:QuotaStatus = '额度读取中'
+  Update-DetailStatus
   try {
-    $script:ReadProcess = Start-DataProcess
+    $script:ReadProcess = Start-DataProcess 'quota'
     $script:ReadOutput = $script:ReadProcess.StandardOutput.ReadToEndAsync()
     $script:ReadError = $script:ReadProcess.StandardError.ReadToEndAsync()
     $script:ReadStarted = [DateTime]::UtcNow
@@ -570,6 +663,61 @@ function Complete-Read {
   }
 }
 
+function Refresh-Tasks {
+  if ($script:TaskReadProcess) { return }
+  $script:TaskStatus = '任务读取中'
+  Update-DetailStatus
+  if ($null -eq $script:CurrentTasks -and $script:Detail.IsVisible) { Render-Tasks }
+  try {
+    $script:TaskReadProcess = Start-DataProcess 'tasks'
+    $script:TaskReadOutput = $script:TaskReadProcess.StandardOutput.ReadToEndAsync()
+    $script:TaskReadError = $script:TaskReadProcess.StandardError.ReadToEndAsync()
+    $script:TaskReadStarted = [DateTime]::UtcNow
+    $script:TaskReadPollTimer.Start()
+  } catch {
+    if ($script:TaskReadProcess) {
+      try { if (-not $script:TaskReadProcess.HasExited) { $script:TaskReadProcess.Kill() } } catch { }
+      $script:TaskReadProcess.Dispose()
+      $script:TaskReadProcess = $null
+    }
+    Show-TaskReadError $_.Exception.Message
+  }
+}
+
+function Complete-TaskRead {
+  $process = $script:TaskReadProcess
+  if (-not $process) { return }
+  if (-not $process.HasExited -or -not $script:TaskReadOutput.IsCompleted -or -not $script:TaskReadError.IsCompleted) {
+    if (([DateTime]::UtcNow - $script:TaskReadStarted).TotalSeconds -lt 30) { return }
+    try { $process.Kill() } catch { }
+    Show-TaskReadError '任务读取超时'
+    $script:TaskReadPollTimer.Stop()
+    $process.Dispose()
+    $script:TaskReadProcess = $null
+    $script:TaskReadOutput = $null
+    $script:TaskReadError = $null
+    return
+  }
+  try {
+    $output = $script:TaskReadOutput.GetAwaiter().GetResult()
+    if (-not $output) {
+      $errorText = $script:TaskReadError.GetAwaiter().GetResult()
+      if ($errorText) { throw $errorText.Trim() }
+      throw '任务接口未返回内容'
+    }
+    try { $data = ConvertFrom-Json -InputObject $output -ErrorAction Stop }
+    catch { throw '任务数据格式异常' }
+    Apply-Tasks $data
+  } catch { Show-TaskReadError $_.Exception.Message }
+  finally {
+    $script:TaskReadPollTimer.Stop()
+    $process.Dispose()
+    $script:TaskReadProcess = $null
+    $script:TaskReadOutput = $null
+    $script:TaskReadError = $null
+  }
+}
+
 function Show-Details {
   $area = [Windows.SystemParameters]::WorkArea
   $left = $script:Mini.Left - $script:Detail.Width - 8
@@ -580,6 +728,10 @@ function Show-Details {
   if ($script:TasksDirty) { Render-Tasks }
   if (-not $script:Detail.IsVisible) { $script:Detail.Show() }
   [void]$script:Detail.Activate()
+  if (-not $PreviewPath -and ($script:TasksLastCheckedAt -le 0 -or
+      ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() - $script:TasksLastCheckedAt) -gt 300000)) {
+    Refresh-Tasks
+  }
 }
 
 function Is-CenterHit($position) {
@@ -623,7 +775,7 @@ $script:Mini.Add_PreviewMouseLeftButtonUp({
 $script:Mini.Add_MouseLeave({ if ([Windows.Input.Mouse]::LeftButton -ne [Windows.Input.MouseButtonState]::Pressed) { $script:PointerDown = $false } })
 $script:DetailDrag.Add_MouseLeftButtonDown({ $script:Detail.DragMove() })
 $script:DetailClose.Add_Click({ $script:Detail.Hide() })
-$script:DetailRefresh.Add_Click({ Refresh-Data })
+$script:DetailRefresh.Add_Click({ Refresh-Tasks })
 
 $menu = New-Object Windows.Controls.ContextMenu
 $openItem = New-Object Windows.Controls.MenuItem
@@ -804,8 +956,10 @@ $closeItem.Header = '退出'
 $closeItem.Add_Click({ $script:Mini.Close() })
 [void]$menu.Items.Add($closeItem)
 $script:Mini.ContextMenu = $menu
+if (-not $PreviewPath) { Load-QuotaCache }
 Set-SkinScale $script:Skin $script:Scale $false
 Apply-Palette $script:PaletteId $false
+Update-DetailStatus
 if ($script:NeedsSettingsMigration -and -not $PreviewPath) { Save-Settings }
 
 if (-not $PreviewPath -and $env:CODEX_WIDGET_SELFTEST -ne '1') {
@@ -840,21 +994,31 @@ $timer.Start()
 $script:ReadPollTimer = New-Object Windows.Threading.DispatcherTimer
 $script:ReadPollTimer.Interval = [TimeSpan]::FromMilliseconds(120)
 $script:ReadPollTimer.Add_Tick({ Complete-Read })
+$script:TaskReadPollTimer = New-Object Windows.Threading.DispatcherTimer
+$script:TaskReadPollTimer.Interval = [TimeSpan]::FromMilliseconds(120)
+$script:TaskReadPollTimer.Add_Tick({ Complete-TaskRead })
 $script:Mini.Add_Loaded({
   $area = [Windows.SystemParameters]::WorkArea
   $script:Mini.Left = $area.Right - $script:Mini.Width - 12
   $script:Mini.Top = $area.Bottom - $script:Mini.Height - 12
   if (-not $PreviewPath) {
+    if ($script:LastGoodQuota) { Show-ReadError '正在更新额度' }
     [void]$script:Mini.Dispatcher.BeginInvoke([Action]{ Refresh-Data }, [Windows.Threading.DispatcherPriority]::ApplicationIdle)
   }
 })
 $script:Mini.Add_Closed({
   $timer.Stop()
   $script:ReadPollTimer.Stop()
+  $script:TaskReadPollTimer.Stop()
   if ($script:ReadProcess) {
     try { if (-not $script:ReadProcess.HasExited) { $script:ReadProcess.Kill() } } catch { }
     $script:ReadProcess.Dispose()
     $script:ReadProcess = $null
+  }
+  if ($script:TaskReadProcess) {
+    try { if (-not $script:TaskReadProcess.HasExited) { $script:TaskReadProcess.Kill() } } catch { }
+    $script:TaskReadProcess.Dispose()
+    $script:TaskReadProcess = $null
   }
   if ($script:TrayIcon) { $script:TrayIcon.Visible = $false; $script:TrayIcon.Dispose() }
   if ($script:TrayMenu) { $script:TrayMenu.Dispose() }
@@ -872,11 +1036,18 @@ if ($env:CODEX_WIDGET_SELFTEST -eq '1') {
     Start-Sleep -Milliseconds 100
     Complete-Read
   }
+  if ($env:CODEX_WIDGET_SELFTEST_TASKS -eq '1') {
+    Refresh-Tasks
+    while ($script:TaskReadProcess) {
+      Start-Sleep -Milliseconds 100
+      Complete-TaskRead
+    }
+  }
   Write-Output ('startMs={0}; primary={1}; secondary={2}; tasks={3}; status={4}' -f
     $startWatch.ElapsedMilliseconds,
     $script:ShortQuota.remainingPercent,
     $script:WeekQuota.remainingPercent,
-    @($script:CurrentTasks).Count,
+    $(if ($env:CODEX_WIDGET_SELFTEST_TASKS -eq '1') { @($script:CurrentTasks).Count } else { 'deferred' }),
     $script:DetailStatus.Text)
   $script:WidgetMutex.ReleaseMutex()
   $script:WidgetMutex.Dispose()
@@ -886,6 +1057,7 @@ if ($env:CODEX_WIDGET_SELFTEST -eq '1') {
 if ($PreviewPath) {
   $script:Mini.Show()
   try { Apply-Data (Read-Data) } catch { Show-ReadError $_.Exception.Message }
+  if ($env:CODEX_WIDGET_PREVIEW_STALE -eq '1') { Show-ReadError '模拟读取失败' }
   if ($env:CODEX_WIDGET_PREVIEW_SLIDER) { $script:SizeSlider.Value = [double]$env:CODEX_WIDGET_PREVIEW_SLIDER }
   if ($env:CODEX_WIDGET_PREVIEW_SWITCH_PALETTE) { Apply-Palette $env:CODEX_WIDGET_PREVIEW_SWITCH_PALETTE $false }
   if ($env:CODEX_WIDGET_PREVIEW_MODE -eq 'reset') {
