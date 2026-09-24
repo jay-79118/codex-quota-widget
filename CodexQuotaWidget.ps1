@@ -9,7 +9,6 @@ $script:SettingsPath = Join-Path $script:AppDirectory 'settings.json'
 $script:Skin = 'ring'
 $script:Scale = 1.0
 $script:TrackMode = 'remaining'
-$script:TaskbarPosition = 0.53
 $script:PaletteId = 'sea'
 $script:Palettes = @{
   sea = @{ Name='海盐青蓝'; Surface='#202631'; Border='#465063'; Track='#394655'; Outer='#64D8B8'; Inner='#86B7FF'; Text='#F0F5F9'; OuterText='#E8FFF7'; InnerText='#AFCBFF'; Card='#2B3441'; Muted='#A9B8C8'; Button='#303B4B'; Metric='#8FCFBF' }
@@ -21,10 +20,7 @@ $script:NeedsSettingsMigration = $false
 if (Test-Path -LiteralPath $script:SettingsPath) {
   try {
     $saved = Get-Content -LiteralPath $script:SettingsPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    if ($saved.skin -in @('ring','track','taskbar')) { $script:Skin = [string]$saved.skin }
-    if ($null -ne $saved.taskbarPosition -and [double]$saved.taskbarPosition -ge 0 -and [double]$saved.taskbarPosition -le 1) {
-      $script:TaskbarPosition = [double]$saved.taskbarPosition
-    }
+    if ($saved.skin -in @('ring','track')) { $script:Skin = [string]$saved.skin }
     if ($saved.palette -and $script:Palettes.ContainsKey([string]$saved.palette)) { $script:PaletteId = [string]$saved.palette }
     if ([double]$saved.version -ge 2 -and [double]$saved.scale -ge 0.5 -and [double]$saved.scale -le 1.5) {
       $script:Scale = [double]$saved.scale
@@ -35,7 +31,7 @@ if (Test-Path -LiteralPath $script:SettingsPath) {
   } catch { }
 }
 if ($PreviewPath) {
-  if ($env:CODEX_WIDGET_PREVIEW_SKIN -in @('ring','track','taskbar')) { $script:Skin = $env:CODEX_WIDGET_PREVIEW_SKIN }
+  if ($env:CODEX_WIDGET_PREVIEW_SKIN -in @('ring','track')) { $script:Skin = $env:CODEX_WIDGET_PREVIEW_SKIN }
   if ($env:CODEX_WIDGET_PREVIEW_PALETTE -and $script:Palettes.ContainsKey($env:CODEX_WIDGET_PREVIEW_PALETTE)) { $script:PaletteId = $env:CODEX_WIDGET_PREVIEW_PALETTE }
   if ($env:CODEX_WIDGET_PREVIEW_SCALE) {
     try { $script:Scale = [Math]::Max(0.5,[Math]::Min(1.5,[double]$env:CODEX_WIDGET_PREVIEW_SCALE)) } catch { }
@@ -87,18 +83,6 @@ if (-not $script:WidgetMutex.WaitOne(0)) { exit }
         </StackPanel>
       </Grid>
     </Viewbox>
-    <Viewbox x:Name="TaskbarView" Stretch="Fill" Visibility="Collapsed">
-      <Border x:Name="TaskbarSurface" Width="224" Height="30" CornerRadius="15"
-              Background="#202631" BorderBrush="#465063" BorderThickness="1" Cursor="Hand">
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-          <TextBlock x:Name="TaskbarLine1" Text="5小时 —" Foreground="#E8FFF7"
-                     FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="108"/>
-          <TextBlock x:Name="TaskbarDivider" Text="  ·  " Foreground="#A9B8C8" FontSize="11"/>
-          <TextBlock x:Name="TaskbarLine2" Text="一周 —" Foreground="#AFCBFF"
-                     FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="108"/>
-        </StackPanel>
-      </Border>
-    </Viewbox>
   </Grid>
 </Window>
 '@
@@ -140,10 +124,9 @@ if (Test-Path -LiteralPath $script:IconPath) {
     $script:Detail.Icon = $script:Mini.Icon
   } catch { }
 }
-foreach ($name in @('RingView','TrackView','TaskbarView','RingSurface','RingOuterBase','RingInnerBase',
+foreach ($name in @('RingView','TrackView','RingSurface','RingOuterBase','RingInnerBase',
   'TrackSurface','TrackOuterBase','TrackInnerBase','OuterFull','OuterArc','InnerFull','InnerArc',
-  'OuterText','InnerText','TrackOuterArc','TrackInnerArc','TrackLine1','TrackLine2',
-  'TaskbarSurface','TaskbarLine1','TaskbarLine2','TaskbarDivider')) {
+  'OuterText','InnerText','TrackOuterArc','TrackInnerArc','TrackLine1','TrackLine2')) {
   Set-Variable -Scope Script -Name $name -Value $script:Mini.FindName($name)
 }
 foreach ($name in @('DetailSurface','DetailDrag','DetailRefresh','DetailClose','TaskList','DetailStatus')) {
@@ -274,43 +257,15 @@ function Update-TrackText {
   if ($script:TrackMode -eq 'reset') {
     $script:TrackLine1.Text = ('5小时 {0}' -f (Reset-Text $script:ShortQuota))
     $script:TrackLine2.Text = ('一周 {0}' -f (Reset-Text $script:WeekQuota))
-    $script:TaskbarLine1.Text = ('5小时 {0}' -f (Reset-Text $script:ShortQuota))
-    $script:TaskbarLine2.Text = ('一周 {0}' -f (Reset-Text $script:WeekQuota))
   } else {
     $script:TrackLine1.Text = ('5小时 {0}' -f (Quota-Percent $script:ShortQuota))
     $script:TrackLine2.Text = ('一周 {0}' -f (Quota-Percent $script:WeekQuota))
-    $script:TaskbarLine1.Text = ('5小时 {0}' -f (Quota-Percent $script:ShortQuota))
-    $script:TaskbarLine2.Text = ('一周 {0}' -f (Quota-Percent $script:WeekQuota))
   }
 }
 
 function Save-Settings {
-  @{ version = 2; skin = $script:Skin; scale = $script:Scale; palette = $script:PaletteId;
-     taskbarPosition = $script:TaskbarPosition } | ConvertTo-Json -Compress |
+  @{ version = 2; skin = $script:Skin; scale = $script:Scale; palette = $script:PaletteId } | ConvertTo-Json -Compress |
     Set-Content -LiteralPath $script:SettingsPath -Encoding UTF8
-}
-
-function Place-TaskbarStrip {
-  if ($script:Skin -ne 'taskbar') { return }
-  $area = [Windows.SystemParameters]::WorkArea
-  $screenBottom = [Windows.SystemParameters]::PrimaryScreenHeight
-  $taskbarHeight = $screenBottom - $area.Bottom
-  if ($taskbarHeight -ge 24 -and $taskbarHeight -le 120) {
-    $script:Mini.Top = $area.Bottom + [Math]::Max(0, ($taskbarHeight - $script:Mini.Height) / 2)
-  } else {
-    $script:Mini.Top = $area.Bottom - $script:Mini.Height - 4
-  }
-  $availableWidth = [Math]::Max(0, $area.Width - $script:Mini.Width)
-  $script:Mini.Left = $area.Left + $availableWidth * $script:TaskbarPosition
-}
-
-function Save-TaskbarPosition {
-  $area = [Windows.SystemParameters]::WorkArea
-  $availableWidth = [Math]::Max(1, $area.Width - $script:Mini.Width)
-  $script:TaskbarPosition = [Math]::Max(0, [Math]::Min(1,
-    ($script:Mini.Left - $area.Left) / $availableWidth))
-  Place-TaskbarStrip
-  Save-Settings
 }
 
 function Color-Brush([string]$value) {
@@ -318,7 +273,7 @@ function Color-Brush([string]$value) {
 }
 
 function Set-SkinScale([string]$skin, [double]$scale, [bool]$save) {
-  if ($skin -notin @('ring','track','taskbar')) { return }
+  if ($skin -notin @('ring','track')) { return }
   $scale = [Math]::Max(0.5, [Math]::Min(1.5, $scale))
   $wasVisible = $script:Mini.IsVisible
   $oldLeft = $script:Mini.Left
@@ -328,18 +283,14 @@ function Set-SkinScale([string]$skin, [double]$scale, [bool]$save) {
   $script:Skin = $skin; $script:Scale = $scale
   $script:RingView.Visibility = if ($skin -eq 'ring') { [Windows.Visibility]::Visible } else { [Windows.Visibility]::Collapsed }
   $script:TrackView.Visibility = if ($skin -eq 'track') { [Windows.Visibility]::Visible } else { [Windows.Visibility]::Collapsed }
-  $script:TaskbarView.Visibility = if ($skin -eq 'taskbar') { [Windows.Visibility]::Visible } else { [Windows.Visibility]::Collapsed }
-  $script:Mini.Width = $(if ($skin -eq 'ring') { 78 } elseif ($skin -eq 'track') { 132 } else { 224 }) * $scale
-  $script:Mini.Height = $(if ($skin -eq 'ring') { 78 } elseif ($skin -eq 'track') { 64 } else { 30 }) * $scale
+  $script:Mini.Width = $(if ($skin -eq 'ring') { 78 } else { 132 }) * $scale
+  $script:Mini.Height = $(if ($skin -eq 'ring') { 78 } else { 64 }) * $scale
   if ($wasVisible) {
     $area = [Windows.SystemParameters]::WorkArea
-    if ($skin -eq 'taskbar') { Place-TaskbarStrip }
-    else {
-      $newLeft = if ($script:ResizingFromSlider) { $oldLeft } else { $centerX - $script:Mini.Width / 2 }
-      $newTop = if ($script:ResizingFromSlider) { $oldTop } else { $centerY - $script:Mini.Height / 2 }
-      $script:Mini.Left = [Math]::Max($area.Left + 4, [Math]::Min($newLeft, $area.Right - $script:Mini.Width - 4))
-      $script:Mini.Top = [Math]::Max($area.Top + 4, [Math]::Min($newTop, $area.Bottom - $script:Mini.Height - 4))
-    }
+    $newLeft = if ($script:ResizingFromSlider) { $oldLeft } else { $centerX - $script:Mini.Width / 2 }
+    $newTop = if ($script:ResizingFromSlider) { $oldTop } else { $centerY - $script:Mini.Height / 2 }
+    $script:Mini.Left = [Math]::Max($area.Left + 4, [Math]::Min($newLeft, $area.Right - $script:Mini.Width - 4))
+    $script:Mini.Top = [Math]::Max($area.Top + 4, [Math]::Min($newTop, $area.Bottom - $script:Mini.Height - 4))
     if ($script:Detail.IsVisible) {
       $script:Detail.Left = [Math]::Max($area.Left + 4, [Math]::Min($script:Detail.Left, $area.Right - $script:Detail.Width - 4))
       $script:Detail.Top = [Math]::Max($area.Top + 4, [Math]::Min($script:Detail.Top, $area.Bottom - $script:Detail.Height - 4))
@@ -406,8 +357,6 @@ function Apply-Palette([string]$paletteId, [bool]$save) {
   $script:RingSurface.Stroke = Color-Brush $script:Palette.Border
   $script:TrackSurface.Fill = Color-Brush $script:Palette.Surface
   $script:TrackSurface.Stroke = Color-Brush $script:Palette.Border
-  $script:TaskbarSurface.Background = Color-Brush $script:Palette.Surface
-  $script:TaskbarSurface.BorderBrush = Color-Brush $script:Palette.Border
   foreach ($shape in @($script:RingOuterBase,$script:RingInnerBase,$script:TrackOuterBase,$script:TrackInnerBase)) {
     $shape.Stroke = Color-Brush $script:Palette.Track
   }
@@ -419,11 +368,8 @@ function Apply-Palette([string]$paletteId, [bool]$save) {
   }
   $script:OuterText.Foreground = Color-Brush $script:Palette.OuterText
   $script:TrackLine1.Foreground = Color-Brush $script:Palette.OuterText
-  $script:TaskbarLine1.Foreground = Color-Brush $script:Palette.OuterText
   $script:InnerText.Foreground = Color-Brush $script:Palette.InnerText
   $script:TrackLine2.Foreground = Color-Brush $script:Palette.InnerText
-  $script:TaskbarLine2.Foreground = Color-Brush $script:Palette.InnerText
-  $script:TaskbarDivider.Foreground = Color-Brush $script:Palette.Muted
   $script:DetailSurface.Background = Color-Brush $script:Palette.Surface
   $script:DetailSurface.BorderBrush = Color-Brush $script:Palette.Border
   $script:DetailDrag.Foreground = Color-Brush $script:Palette.Text
@@ -462,7 +408,7 @@ function Apply-Data($data) {
       Set-TrackArc $script:TrackInnerArc 0 100 18
     }
     Update-TrackText
-    $script:Mini.ToolTip = ("5 小时剩余 {0}，{1} 重置`n一周剩余 {2}，{3} 重置" -f
+    $script:Mini.ToolTip = ("外环：5 小时剩余 {0}，{1} 重置`n内环：一周剩余 {2}，{3} 重置" -f
       $(if ($short) { '{0:0}%' -f [double]$short.remainingPercent } else { '未知' }),
       (Reset-Text $short.resetsAt),
       $(if ($week) { '{0:0}%' -f [double]$week.remainingPercent } else { '未知' }),
@@ -492,8 +438,6 @@ function Show-ReadError([string]$message) {
     Set-TrackArc $script:TrackInnerArc 0 100 18
     $script:TrackLine1.Text = '5小时 —'
     $script:TrackLine2.Text = '一周 —'
-    $script:TaskbarLine1.Text = '5小时 —'
-    $script:TaskbarLine2.Text = '一周 —'
     $script:Mini.ToolTip = '读取失败，右键刷新'
     $script:DetailStatus.Text = ('读取失败：{0}' -f $message)
     if ($script:TrayIcon) { $script:TrayIcon.Text = 'Codex 额度 · 读取失败' }
@@ -572,7 +516,6 @@ function Is-CenterHit($position) {
   }
   $x = $position.X / $script:Scale
   $y = $position.Y / $script:Scale
-  if ($script:Skin -eq 'taskbar') { return $true }
   if ($y -lt 18 -or $y -gt 46 -or $x -lt 20 -or $x -gt 112) { return $false }
   if ($x -ge 34 -and $x -le 98) { return $true }
   $arcX = if ($x -lt 34) { 34 } else { 98 }
@@ -592,13 +535,12 @@ $script:Mini.Add_PreviewMouseMove({
   $script:DragStarted = $true
   $script:PointerDown = $false
   try { $script:Mini.DragMove() } catch { }
-  finally { if ($script:Skin -eq 'taskbar') { Save-TaskbarPosition } }
 })
 $script:Mini.Add_PreviewMouseLeftButtonUp({
   if (-not $script:PointerDown -or $script:DragStarted) { return }
   $script:PointerDown = $false
   if (Is-CenterHit ($_.GetPosition($script:Mini))) {
-    if ($script:Skin -in @('track','taskbar')) {
+    if ($script:Skin -eq 'track') {
       $script:TrackMode = if ($script:TrackMode -eq 'remaining') { 'reset' } else { 'remaining' }
       Update-TrackText
     } else { Show-Details }
@@ -620,7 +562,7 @@ $refreshItem.Add_Click({ Refresh-Data })
 [void]$menu.Items.Add($refreshItem)
 $skinMenu = New-Object Windows.Controls.MenuItem
 $skinMenu.Header = '皮肤'
-foreach ($entry in @(@('ring','双圆环'),@('track','跑道'),@('taskbar','任务栏横条'))) {
+foreach ($entry in @(@('ring','双圆环'),@('track','跑道'))) {
   $item = New-Object Windows.Controls.MenuItem
   $item.Header = $entry[1]
   $item.Tag = $entry[0]
@@ -770,10 +712,7 @@ if (-not $PreviewPath -and $env:CODEX_WIDGET_SELFTEST -ne '1') {
 
 $timer = New-Object Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromSeconds(60)
-$timer.Add_Tick({
-  if ($script:Skin -eq 'taskbar') { Place-TaskbarStrip }
-  Refresh-Data
-})
+$timer.Add_Tick({ Refresh-Data })
 $timer.Start()
 $script:ReadPollTimer = New-Object Windows.Threading.DispatcherTimer
 $script:ReadPollTimer.Interval = [TimeSpan]::FromMilliseconds(120)
@@ -782,7 +721,6 @@ $script:Mini.Add_Loaded({
   $area = [Windows.SystemParameters]::WorkArea
   $script:Mini.Left = $area.Right - $script:Mini.Width - 12
   $script:Mini.Top = $area.Bottom - $script:Mini.Height - 12
-  if ($script:Skin -eq 'taskbar') { Place-TaskbarStrip }
   if (-not $PreviewPath) {
     [void]$script:Mini.Dispatcher.BeginInvoke([Action]{ Refresh-Data }, [Windows.Threading.DispatcherPriority]::ApplicationIdle)
   }
