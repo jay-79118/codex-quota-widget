@@ -10,6 +10,11 @@ $script:Skin = 'ring'
 $script:Scale = 1.0
 $script:TrackMode = 'remaining'
 $script:PaletteId = 'sea'
+$script:NoticeEnabled = $true
+$script:FiveHourThreshold = 20
+$script:WeekThreshold = 10
+$script:ResetSoonMinutes = 15
+$script:NoticeKeys = @{}
 $script:Palettes = @{
   sea = @{ Name='海盐青蓝'; Surface='#202631'; Border='#465063'; Track='#394655'; Outer='#64D8B8'; Inner='#86B7FF'; Text='#F0F5F9'; OuterText='#E8FFF7'; InnerText='#AFCBFF'; Card='#2B3441'; Muted='#A9B8C8'; Button='#303B4B'; Metric='#8FCFBF' }
   dusk = @{ Name='暮光紫粉'; Surface='#252032'; Border='#59496A'; Track='#483A59'; Outer='#C4A0F8'; Inner='#FFB4C7'; Text='#F9F3FF'; OuterText='#F5E8FF'; InnerText='#FFD4DE'; Card='#332B42'; Muted='#C1B3D0'; Button='#453852'; Metric='#D4B6FF' }
@@ -22,6 +27,17 @@ if (Test-Path -LiteralPath $script:SettingsPath) {
     $saved = Get-Content -LiteralPath $script:SettingsPath -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($saved.skin -in @('ring','track')) { $script:Skin = [string]$saved.skin }
     if ($saved.palette -and $script:Palettes.ContainsKey([string]$saved.palette)) { $script:PaletteId = [string]$saved.palette }
+    if ($saved.PSObject.Properties.Name -contains 'noticeEnabled') { $script:NoticeEnabled = [bool]$saved.noticeEnabled }
+    if ($saved.fiveHourThreshold -in @(0,5,10,15,20,25,30,50)) { $script:FiveHourThreshold = [int]$saved.fiveHourThreshold }
+    if ($saved.weekThreshold -in @(0,5,10,15,20,25,30,50)) { $script:WeekThreshold = [int]$saved.weekThreshold }
+    if ($saved.resetSoonMinutes -in @(0,5,10,15,30,60)) { $script:ResetSoonMinutes = [int]$saved.resetSoonMinutes }
+    if ($saved.noticeKeys) {
+      foreach ($property in $saved.noticeKeys.PSObject.Properties) {
+        if ($property.Name -in @('fiveLow','weekLow','fiveReset','weekReset')) {
+          $script:NoticeKeys[$property.Name] = [string]$property.Value
+        }
+      }
+    }
     if ([double]$saved.version -ge 2 -and [double]$saved.scale -ge 0.5 -and [double]$saved.scale -le 1.5) {
       $script:Scale = [double]$saved.scale
     } elseif ([double]$saved.scale -in @(0.75,1.0,1.25,1.5)) {
@@ -264,8 +280,49 @@ function Update-TrackText {
 }
 
 function Save-Settings {
-  @{ version = 2; skin = $script:Skin; scale = $script:Scale; palette = $script:PaletteId } | ConvertTo-Json -Compress |
+  @{ version = 2; skin = $script:Skin; scale = $script:Scale; palette = $script:PaletteId;
+     noticeEnabled = $script:NoticeEnabled; fiveHourThreshold = $script:FiveHourThreshold;
+     weekThreshold = $script:WeekThreshold; resetSoonMinutes = $script:ResetSoonMinutes;
+     noticeKeys = $script:NoticeKeys } | ConvertTo-Json -Compress |
     Set-Content -LiteralPath $script:SettingsPath -Encoding UTF8
+}
+
+function Show-QuotaNotices($data) {
+  if ($PreviewPath -or $env:CODEX_WIDGET_SELFTEST -eq '1' -or
+      -not $script:NoticeEnabled -or -not $script:TrayIcon -or $data.quota.error) { return }
+  $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+  $lines = New-Object System.Collections.Generic.List[string]
+  $pending = @{}
+  foreach ($window in @(
+      @{ quota = $data.quota.primary; name = '5 小时额度'; lowId = 'fiveLow'; resetId = 'fiveReset'; threshold = $script:FiveHourThreshold },
+      @{ quota = $data.quota.secondary; name = '一周额度'; lowId = 'weekLow'; resetId = 'weekReset'; threshold = $script:WeekThreshold }
+    )) {
+    $quota = $window.quota
+    if ($null -eq $quota -or $null -eq $quota.remainingPercent -or $null -eq $quota.resetsAt) { continue }
+    try {
+      $percent = [double]$quota.remainingPercent
+      $resetAt = [long]$quota.resetsAt
+    } catch { continue }
+    if ([double]::IsNaN($percent) -or $percent -lt 0 -or $percent -gt 100 -or $resetAt -le $now) { continue }
+    $windowKey = [string]$resetAt
+    if ($window.threshold -gt 0 -and $percent -le $window.threshold -and
+        $script:NoticeKeys[$window.lowId] -ne $windowKey) {
+      $lines.Add(('{0}仅剩 {1:0}%（阈值 {2}%）' -f $window.name, $percent, $window.threshold))
+      $pending[$window.lowId] = $windowKey
+    }
+    if ($script:ResetSoonMinutes -gt 0 -and ($resetAt - $now) -le ($script:ResetSoonMinutes * 60) -and
+        $script:NoticeKeys[$window.resetId] -ne $windowKey) {
+      $lines.Add(('{0}将于 {1} 恢复' -f $window.name, (Reset-Text $resetAt)))
+      $pending[$window.resetId] = $windowKey
+    }
+  }
+  if ($lines.Count -eq 0) { return }
+  try {
+    $script:TrayIcon.ShowBalloonTip(10000, 'Codex 额度提醒', ($lines -join "`n"),
+      [System.Windows.Forms.ToolTipIcon]::Info)
+    foreach ($key in $pending.Keys) { $script:NoticeKeys[$key] = $pending[$key] }
+    Save-Settings
+  } catch { }
 }
 
 function Color-Brush([string]$value) {
@@ -426,6 +483,7 @@ function Apply-Data($data) {
     if ($script:TrayIcon) {
       $script:TrayIcon.Text = ('Codex 额度  5小时 {0}  一周 {1}' -f (Quota-Percent $short), (Quota-Percent $week))
     }
+    Show-QuotaNotices $data
   } catch { Show-ReadError $_.Exception.Message }
 }
 
@@ -609,6 +667,45 @@ foreach ($paletteChoiceId in @('sea','dusk','moss','cream')) {
   [void]$paletteMenu.Items.Add($item)
 }
 [void]$menu.Items.Add($paletteMenu)
+$noticeMenu = New-Object Windows.Controls.MenuItem
+$noticeMenu.Header = '额度提醒'
+$noticeToggle = New-Object Windows.Controls.MenuItem
+$noticeToggle.Header = '启用系统通知'
+$noticeToggle.IsCheckable = $true
+$noticeToggle.IsChecked = $script:NoticeEnabled
+$noticeToggle.Add_Click({
+  param($sender, $args)
+  $script:NoticeEnabled = [bool]$sender.IsChecked
+  Save-Settings
+})
+[void]$noticeMenu.Items.Add($noticeToggle)
+foreach ($setting in @(
+    @{ title = '5 小时剩余 ≤'; name = 'FiveHourThreshold'; values = @(0,5,10,15,20,25,30,50); suffix = '%' },
+    @{ title = '一周剩余 ≤'; name = 'WeekThreshold'; values = @(0,5,10,15,20,25,30,50); suffix = '%' },
+    @{ title = '恢复前提醒'; name = 'ResetSoonMinutes'; values = @(0,5,10,15,30,60); suffix = ' 分钟' }
+  )) {
+  $settingMenu = New-Object Windows.Controls.MenuItem
+  $settingMenu.Header = $setting.title
+  foreach ($value in $setting.values) {
+    $choice = New-Object Windows.Controls.MenuItem
+    $choice.Header = if ($value -eq 0) { '关闭' } else { '{0}{1}' -f $value, $setting.suffix }
+    $choice.Tag = @{ name = $setting.name; value = [int]$value; menu = $settingMenu }
+    $choice.IsCheckable = $true
+    $choice.IsChecked = (Get-Variable -Scope Script -Name $setting.name -ValueOnly) -eq $value
+    $choice.Add_Click({
+      param($sender, $args)
+      $selected = $sender.Tag
+      Set-Variable -Scope Script -Name $selected.name -Value $selected.value
+      foreach ($option in $selected.menu.Items) {
+        $option.IsChecked = $option.Tag.value -eq $selected.value
+      }
+      Save-Settings
+    })
+    [void]$settingMenu.Items.Add($choice)
+  }
+  [void]$noticeMenu.Items.Add($settingMenu)
+}
+[void]$menu.Items.Add($noticeMenu)
 $sizeMenu = New-Object Windows.Controls.MenuItem
 $sizeMenu.Header = '大小'
 $sizeItem = New-Object Windows.Controls.MenuItem
