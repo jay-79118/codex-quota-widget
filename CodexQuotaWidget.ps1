@@ -15,11 +15,17 @@ $script:FiveHourThreshold = 20
 $script:WeekThreshold = 10
 $script:ResetSoonMinutes = 15
 $script:NoticeKeys = @{}
+$script:PaletteOrder = @('sea','dusk','moss','ink','midnight','mono','cream','frost','clay')
 $script:Palettes = @{
-  sea = @{ Name='海盐青蓝'; Surface='#202631'; Border='#465063'; Track='#394655'; Outer='#64D8B8'; Inner='#86B7FF'; Text='#F0F5F9'; OuterText='#E8FFF7'; InnerText='#AFCBFF'; Card='#2B3441'; Muted='#A9B8C8'; Button='#303B4B'; Metric='#8FCFBF' }
-  dusk = @{ Name='暮光紫粉'; Surface='#252032'; Border='#59496A'; Track='#483A59'; Outer='#C4A0F8'; Inner='#FFB4C7'; Text='#F9F3FF'; OuterText='#F5E8FF'; InnerText='#FFD4DE'; Card='#332B42'; Muted='#C1B3D0'; Button='#453852'; Metric='#D4B6FF' }
-  moss = @{ Name='苔石金绿'; Surface='#1F2825'; Border='#4B6155'; Track='#364B42'; Outer='#F0C879'; Inner='#8BDCC6'; Text='#FFF9EA'; OuterText='#FFF1CC'; InnerText='#CAF6E8'; Card='#2C3A33'; Muted='#B5C9BB'; Button='#3C5044'; Metric='#F0C879' }
-  cream = @{ Name='奶油珊瑚'; Surface='#FFF8F1'; Border='#B39E94'; Track='#DECEC5'; Outer='#BE655B'; Inner='#526EAA'; Text='#3D343A'; OuterText='#5B3030'; InnerText='#324D7A'; Card='#F3E9E3'; Muted='#6E6268'; Button='#E8D9D2'; Metric='#9D4944' }
+  sea = @{ Name='深海青'; Surface='#141C24'; Border='#40515F'; Track='#34424D'; Outer='#68D1BE'; Inner='#9EB6F0'; Text='#EDF4F6'; OuterText='#F4FAFB'; InnerText='#D9E7F2'; Card='#20303A'; Muted='#B4C5CF'; Button='#2C3C47'; Metric='#83D8C8' }
+  dusk = @{ Name='暮紫灰'; Surface='#211F2A'; Border='#514D62'; Track='#413D50'; Outer='#C4B0E9'; Inner='#E2B9B1'; Text='#F5F1F7'; OuterText='#F5ECFF'; InnerText='#F7DDD8'; Card='#302B3A'; Muted='#CEC2D4'; Button='#3E374A'; Metric='#D2BCEF' }
+  moss = @{ Name='松烟绿'; Surface='#17211D'; Border='#47584F'; Track='#37483D'; Outer='#B9CF9A'; Inner='#83C7BA'; Text='#F1F5EE'; OuterText='#F4F9E9'; InnerText='#D2EEE6'; Card='#26322B'; Muted='#BCCBBE'; Button='#34453A'; Metric='#C5D9A9' }
+  ink = @{ Name='石墨蓝'; Surface='#171A20'; Border='#505865'; Track='#39414D'; Outer='#AFC7EC'; Inner='#B0C6D2'; Text='#F3F5F7'; OuterText='#E8F0FC'; InnerText='#DBEBF2'; Card='#242B35'; Muted='#BAC4CE'; Button='#313C4A'; Metric='#BED4F1' }
+  midnight = @{ Name='午夜蓝'; Surface='#0E1730'; Border='#34517A'; Track='#294366'; Outer='#73BCFF'; Inner='#A58BDB'; Text='#F1F5FF'; OuterText='#DDF0FF'; InnerText='#E7DCFF'; Card='#17294A'; Muted='#BACAE6'; Button='#244166'; Metric='#8ACBFF' }
+  mono = @{ Name='黑曜石'; Surface='#121416'; Border='#4B5056'; Track='#33383D'; Outer='#DEE4E8'; Inner='#8898A3'; Text='#F3F5F6'; OuterText='#F5F7F8'; InnerText='#C8D3D9'; Card='#20252A'; Muted='#ACB7BE'; Button='#2D343A'; Metric='#E4EBED' }
+  cream = @{ Name='奶油砂岩'; Surface='#F5F1E9'; Border='#B9AEA2'; Track='#D7CDC1'; Outer='#795B35'; Inner='#356D70'; Text='#302F2D'; OuterText='#49351F'; InnerText='#27575A'; Card='#E9E2D8'; Muted='#625A52'; Button='#DCD0C1'; Metric='#6C5434' }
+  frost = @{ Name='冰川白'; Surface='#EFF5F6'; Border='#A5BEC3'; Track='#CADCE0'; Outer='#177381'; Inner='#405D9B'; Text='#1B303A'; OuterText='#164E59'; InnerText='#334D83'; Card='#E1EBEE'; Muted='#4A626B'; Button='#D2E3E7'; Metric='#205E69' }
+  clay = @{ Name='陶土白'; Surface='#F5EFE8'; Border='#C9B7A8'; Track='#E2D4C8'; Outer='#9D543C'; Inner='#796247'; Text='#382E2A'; OuterText='#78412F'; InnerText='#5E4C37'; Card='#ECE0D6'; Muted='#66594F'; Button='#E1CFC2'; Metric='#814632' }
 }
 $script:NeedsSettingsMigration = $false
 if (Test-Path -LiteralPath $script:SettingsPath) {
@@ -636,7 +642,7 @@ foreach ($entry in @(@('ring','双圆环'),@('track','跑道'))) {
 [void]$menu.Items.Add($skinMenu)
 $paletteMenu = New-Object Windows.Controls.MenuItem
 $paletteMenu.Header = '配色'
-foreach ($paletteChoiceId in @('sea','dusk','moss','cream')) {
+foreach ($paletteChoiceId in $script:PaletteOrder) {
   $paletteOption = $script:Palettes[$paletteChoiceId]
   $item = New-Object Windows.Controls.MenuItem
   $item.Tag = $paletteChoiceId
