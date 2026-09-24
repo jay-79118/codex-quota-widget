@@ -16,6 +16,8 @@ $script:FiveHourThreshold = 20
 $script:WeekThreshold = 10
 $script:ResetSoonMinutes = 15
 $script:NoticeKeys = @{}
+$script:NoticeStateDirty = $false
+$script:LastNoticeStateSaveAt = 0L
 $script:QuotaStatus = '额度读取中'
 $script:TaskStatus = '任务未读取'
 $script:TasksLastCheckedAt = 0
@@ -355,15 +357,38 @@ function Update-DetailStatus {
   $script:DetailStatus.Text = $script:QuotaStatus + ' · ' + $script:TaskStatus
 }
 
+function Test-ExistingNoticeWindow([string]$noticeId, [long]$resetAt, [double]$durationMinutes) {
+  if (-not $script:NoticeKeys.ContainsKey($noticeId)) { return $false }
+  $previousResetAt = 0L
+  try { $previousResetAt = [long]$script:NoticeKeys[$noticeId] } catch { return $false }
+  if ($previousResetAt -le 0) { return $false }
+  $halfWindowSeconds = [long]([Math]::Max(60, $durationMinutes) * 30)
+  if ([Math]::Abs($resetAt - $previousResetAt) -ge $halfWindowSeconds) { return $false }
+  if ($resetAt -ne $previousResetAt) {
+    $script:NoticeKeys[$noticeId] = [string]$resetAt
+    $script:NoticeStateDirty = $true
+  }
+  return $true
+}
+
+function Save-NoticeState([long]$now) {
+  try {
+    Save-Settings
+    $script:NoticeStateDirty = $false
+    $script:LastNoticeStateSaveAt = $now
+  } catch { }
+}
+
 function Show-QuotaNotices($data) {
   if ($PreviewPath -or $env:CODEX_WIDGET_SELFTEST -eq '1' -or
       -not $script:NoticeEnabled -or -not $script:TrayIcon -or $data.quota.error) { return }
   $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
   $lines = New-Object System.Collections.Generic.List[string]
   $pending = @{}
+  $rearmed = $false
   foreach ($window in @(
-      @{ quota = $data.quota.primary; name = '5 小时额度'; lowId = 'fiveLow'; resetId = 'fiveReset'; threshold = $script:FiveHourThreshold },
-      @{ quota = $data.quota.secondary; name = '一周额度'; lowId = 'weekLow'; resetId = 'weekReset'; threshold = $script:WeekThreshold }
+      @{ quota = $data.quota.primary; name = '5 小时额度'; lowId = 'fiveLow'; resetId = 'fiveReset'; threshold = $script:FiveHourThreshold; duration = 300 },
+      @{ quota = $data.quota.secondary; name = '一周额度'; lowId = 'weekLow'; resetId = 'weekReset'; threshold = $script:WeekThreshold; duration = 10080 }
     )) {
     $quota = $window.quota
     if ($null -eq $quota -or $null -eq $quota.remainingPercent -or $null -eq $quota.resetsAt) { continue }
@@ -372,24 +397,47 @@ function Show-QuotaNotices($data) {
       $resetAt = [long]$quota.resetsAt
     } catch { continue }
     if ([double]::IsNaN($percent) -or $percent -lt 0 -or $percent -gt 100 -or $resetAt -le $now) { continue }
-    $windowKey = [string]$resetAt
+    if ($percent -ge 80) {
+      foreach ($noticeId in @($window.lowId, $window.resetId)) {
+        if ($script:NoticeKeys.ContainsKey($noticeId)) {
+          $script:NoticeKeys.Remove($noticeId)
+          $script:NoticeStateDirty = $true
+          $rearmed = $true
+        }
+      }
+    }
+    $duration = [double]$window.duration
+    try {
+      if ([double]$quota.windowDurationMins -ge 60 -and
+          [double]$quota.windowDurationMins -le 10080) {
+        $duration = [double]$quota.windowDurationMins
+      }
+    } catch { }
+    $sameLowWindow = Test-ExistingNoticeWindow $window.lowId $resetAt $duration
+    $sameResetWindow = Test-ExistingNoticeWindow $window.resetId $resetAt $duration
     if ($window.threshold -gt 0 -and $percent -le $window.threshold -and
-        $script:NoticeKeys[$window.lowId] -ne $windowKey) {
+        -not $sameLowWindow) {
       $lines.Add(('{0}仅剩 {1:0}%（阈值 {2}%）' -f $window.name, $percent, $window.threshold))
-      $pending[$window.lowId] = $windowKey
+      $pending[$window.lowId] = [string]$resetAt
     }
     if ($script:ResetSoonMinutes -gt 0 -and ($resetAt - $now) -le ($script:ResetSoonMinutes * 60) -and
-        $script:NoticeKeys[$window.resetId] -ne $windowKey) {
+        -not $sameResetWindow) {
       $lines.Add(('{0}将于 {1} 恢复' -f $window.name, (Reset-Text $resetAt)))
-      $pending[$window.resetId] = $windowKey
+      $pending[$window.resetId] = [string]$resetAt
     }
   }
-  if ($lines.Count -eq 0) { return }
+  if ($lines.Count -eq 0) {
+    if ($script:NoticeStateDirty -and
+        ($rearmed -or ($now - $script:LastNoticeStateSaveAt) -ge 900)) {
+      Save-NoticeState $now
+    }
+    return
+  }
+  foreach ($key in $pending.Keys) { $script:NoticeKeys[$key] = $pending[$key] }
+  Save-NoticeState $now
   try {
     $script:TrayIcon.ShowBalloonTip(10000, 'Codex 额度提醒', ($lines -join "`n"),
       [System.Windows.Forms.ToolTipIcon]::Info)
-    foreach ($key in $pending.Keys) { $script:NoticeKeys[$key] = $pending[$key] }
-    Save-Settings
   } catch { }
 }
 

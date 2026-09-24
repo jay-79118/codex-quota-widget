@@ -8,7 +8,7 @@ using System.Windows.Forms;
 [assembly: AssemblyTitle("Codex Quota Widget")]
 [assembly: AssemblyProduct("Codex Quota Widget")]
 [assembly: AssemblyDescription("Windows launcher for the Codex quota widget")]
-[assembly: AssemblyVersion("0.1.5.0")]
+[assembly: AssemblyVersion("0.1.7.0")]
 
 internal static class WidgetLauncher
 {
