@@ -22,7 +22,7 @@
 
 启动器使用 `-ExecutionPolicy Bypass`，仅对这次 PowerShell 进程生效；运行前请确认脚本来自你信任的来源。
 
-- 右键菜单可切换双圆环或跑道皮肤、九种配色、50%～150% 无级大小，也可手动刷新、查看任务 Token 或退出。
+- 右键菜单可切换双圆环或跑道皮肤、十四种配色、50%～150% 无级大小，也可手动刷新、查看任务 Token 或退出。配色分为“时装配色”和“简约配色”。
 - 右键“额度提醒”可启用或关闭系统通知，分别调整五小时和一周的低额度阈值，以及恢复前提醒时间。默认在剩余比例不高于 20%／10% 或恢复前 15 分钟提醒；同一额度窗口的同类提醒只请求一次。提醒由 Windows 通知区域图标发出，受系统通知设置影响，不占用任务栏的天气位置。
 - 悬停显示两档额度的剩余比例与恢复时间。按住并移动小组件可拖动位置。
 - 跑道中央两行依次显示五小时和一周信息；点击中央切换剩余比例与恢复时间。
@@ -30,7 +30,11 @@
 
 ## 配色预览
 
-现有配色已重新调整，并加入石墨蓝、午夜蓝、黑曜石、冰川白和陶土白。已保存的配色选择会保留。下图依次展示每种配色的圆环与跑道皮肤：
+五组时装配色参考了 [Pantone 2026 秋冬纽约时装周色彩趋势](https://www.pantone.com/uk/en-gb/articles/fashion-color-trend-report/new-york-fashion-week-autumn-winter-2026)、[Pantone 2026 新色组合](https://www.pantone.com/articles/color-palettes/new-pantone-pms-colors-2026-color-palettes)及 [2026 春夏秀场撞色趋势](https://www.vogue.com/article/spring-color-trends-2026)。这些是本项目自行调配的屏幕色值，并非 Pantone 官方色卡。
+
+![五组时装配色的圆环和跑道预览](docs/fashion-palettes.png)
+
+九组简约配色保留原有选择，并加入石墨蓝、午夜蓝、黑曜石、冰川白和陶土白。已保存的配色选择会保留：
 
 ![九种配色的圆环和跑道预览](docs/palettes.png)
 

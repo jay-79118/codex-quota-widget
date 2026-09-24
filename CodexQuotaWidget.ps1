@@ -9,14 +9,20 @@ $script:SettingsPath = Join-Path $script:AppDirectory 'settings.json'
 $script:Skin = 'ring'
 $script:Scale = 1.0
 $script:TrackMode = 'remaining'
-$script:PaletteId = 'sea'
+$script:PaletteId = 'cloud'
 $script:NoticeEnabled = $true
 $script:FiveHourThreshold = 20
 $script:WeekThreshold = 10
 $script:ResetSoonMinutes = 15
 $script:NoticeKeys = @{}
+$script:FashionPaletteOrder = @('runway','cocoa','oxygen','cloud','rouge')
 $script:PaletteOrder = @('sea','dusk','moss','ink','midnight','mono','cream','frost','clay')
 $script:Palettes = @{
+  runway = @{ Name='钴蓝番茄'; Surface='#F4F0E9'; Border='#AEB0B7'; Track='#CFCDD0'; Outer='#3050C2'; Inner='#BC462F'; Text='#292B31'; OuterText='#263D99'; InnerText='#963B2D'; Card='#E7E4E2'; Muted='#54545B'; Button='#DAD7D7'; Metric='#334BA4' }
+  cocoa = @{ Name='葡萄可可'; Surface='#251B22'; Border='#684D5D'; Track='#4D3A49'; Outer='#C797D0'; Inner='#F3AF8D'; Text='#F8EEF1'; OuterText='#F4DFF7'; InnerText='#FBD8C5'; Card='#352630'; Muted='#D1BCCB'; Button='#493340'; Metric='#DDB1E3' }
+  oxygen = @{ Name='青柠夜幕'; Surface='#171E17'; Border='#4F5B42'; Track='#3A4934'; Outer='#D4E66C'; Inner='#80D1AE'; Text='#F5F8E9'; OuterText='#F4F8CE'; InnerText='#D5F4E4'; Card='#293528'; Muted='#C5D1BA'; Button='#374633'; Metric='#D6E685' }
+  cloud = @{ Name='云白鼠尾草'; Surface='#F6F5F0'; Border='#B8BAB3'; Track='#DBDED6'; Outer='#4F7866'; Inner='#745B95'; Text='#302F36'; OuterText='#355846'; InnerText='#5D4878'; Card='#EBEBE6'; Muted='#5B5E59'; Button='#DDE0D9'; Metric='#416A56' }
+  rouge = @{ Name='酒红杏粉'; Surface='#261A20'; Border='#684455'; Track='#4C3440'; Outer='#E8757C'; Inner='#EDB0C1'; Text='#FCF0F3'; OuterText='#FFE0E6'; InnerText='#F2D8E6'; Card='#3A2530'; Muted='#D8BEC9'; Button='#543442'; Metric='#F3A5B6' }
   sea = @{ Name='深海青'; Surface='#141C24'; Border='#40515F'; Track='#34424D'; Outer='#68D1BE'; Inner='#9EB6F0'; Text='#EDF4F6'; OuterText='#F4FAFB'; InnerText='#D9E7F2'; Card='#20303A'; Muted='#B4C5CF'; Button='#2C3C47'; Metric='#83D8C8' }
   dusk = @{ Name='暮紫灰'; Surface='#211F2A'; Border='#514D62'; Track='#413D50'; Outer='#C4B0E9'; Inner='#E2B9B1'; Text='#F5F1F7'; OuterText='#F5ECFF'; InnerText='#F7DDD8'; Card='#302B3A'; Muted='#CEC2D4'; Button='#3E374A'; Metric='#D2BCEF' }
   moss = @{ Name='松烟绿'; Surface='#17211D'; Border='#47584F'; Track='#37483D'; Outer='#B9CF9A'; Inner='#83C7BA'; Text='#F1F5EE'; OuterText='#F4F9E9'; InnerText='#D2EEE6'; Card='#26322B'; Muted='#BCCBBE'; Button='#34453A'; Metric='#C5D9A9' }
@@ -642,35 +648,45 @@ foreach ($entry in @(@('ring','双圆环'),@('track','跑道'))) {
 [void]$menu.Items.Add($skinMenu)
 $paletteMenu = New-Object Windows.Controls.MenuItem
 $paletteMenu.Header = '配色'
-foreach ($paletteChoiceId in $script:PaletteOrder) {
-  $paletteOption = $script:Palettes[$paletteChoiceId]
-  $item = New-Object Windows.Controls.MenuItem
-  $item.Tag = $paletteChoiceId
-  $item.IsCheckable = $true
-  $item.IsChecked = $script:PaletteId -eq $paletteChoiceId
-  $swatches = New-Object Windows.Controls.StackPanel
-  $swatches.Orientation = [Windows.Controls.Orientation]::Horizontal
-  foreach ($color in @($paletteOption.Outer,$paletteOption.Inner)) {
-    $dot = New-Object Windows.Controls.Border
-    $dot.Width = 11; $dot.Height = 11
-    $dot.CornerRadius = New-Object Windows.CornerRadius(5.5)
-    $dot.Background = Color-Brush $color
-    $dot.Margin = New-Object Windows.Thickness(0,0,4,0)
-    [void]$swatches.Children.Add($dot)
+$script:PaletteMenuItems = @()
+foreach ($group in @(
+    @{ title = '时装配色'; ids = $script:FashionPaletteOrder },
+    @{ title = '简约配色'; ids = $script:PaletteOrder }
+  )) {
+  $groupMenu = New-Object Windows.Controls.MenuItem
+  $groupMenu.Header = $group.title
+  foreach ($paletteChoiceId in $group.ids) {
+    $paletteOption = $script:Palettes[$paletteChoiceId]
+    $item = New-Object Windows.Controls.MenuItem
+    $item.Tag = $paletteChoiceId
+    $item.IsCheckable = $true
+    $item.IsChecked = $script:PaletteId -eq $paletteChoiceId
+    $swatches = New-Object Windows.Controls.StackPanel
+    $swatches.Orientation = [Windows.Controls.Orientation]::Horizontal
+    foreach ($color in @($paletteOption.Outer,$paletteOption.Inner)) {
+      $dot = New-Object Windows.Controls.Border
+      $dot.Width = 11; $dot.Height = 11
+      $dot.CornerRadius = New-Object Windows.CornerRadius(5.5)
+      $dot.Background = Color-Brush $color
+      $dot.Margin = New-Object Windows.Thickness(0,0,4,0)
+      [void]$swatches.Children.Add($dot)
+    }
+    $label = New-Object Windows.Controls.TextBlock
+    $label.Text = $paletteOption.Name
+    $label.SetResourceReference([Windows.Controls.TextBlock]::ForegroundProperty, [Windows.SystemColors]::MenuTextBrushKey)
+    $label.VerticalAlignment = [Windows.VerticalAlignment]::Center
+    $label.Margin = New-Object Windows.Thickness(3,0,0,0)
+    [void]$swatches.Children.Add($label)
+    $item.Header = $swatches
+    $item.Add_Click({
+      param($sender, $args)
+      Apply-Palette ([string]$sender.Tag) $true
+      foreach ($choice in $script:PaletteMenuItems) { $choice.IsChecked = [string]$choice.Tag -eq $script:PaletteId }
+    })
+    [void]$groupMenu.Items.Add($item)
+    $script:PaletteMenuItems += $item
   }
-  $label = New-Object Windows.Controls.TextBlock
-  $label.Text = $paletteOption.Name
-  $label.SetResourceReference([Windows.Controls.TextBlock]::ForegroundProperty, [Windows.SystemColors]::MenuTextBrushKey)
-  $label.VerticalAlignment = [Windows.VerticalAlignment]::Center
-  $label.Margin = New-Object Windows.Thickness(3,0,0,0)
-  [void]$swatches.Children.Add($label)
-  $item.Header = $swatches
-  $item.Add_Click({
-    param($sender, $args)
-    Apply-Palette ([string]$sender.Tag) $true
-    foreach ($choice in $paletteMenu.Items) { $choice.IsChecked = [string]$choice.Tag -eq $script:PaletteId }
-  })
-  [void]$paletteMenu.Items.Add($item)
+  [void]$paletteMenu.Items.Add($groupMenu)
 }
 [void]$menu.Items.Add($paletteMenu)
 $noticeMenu = New-Object Windows.Controls.MenuItem
