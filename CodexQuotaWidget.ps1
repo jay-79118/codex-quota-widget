@@ -15,7 +15,7 @@ $script:FiveHourThreshold = 20
 $script:WeekThreshold = 10
 $script:ResetSoonMinutes = 15
 $script:NoticeKeys = @{}
-$script:FashionPaletteOrder = @('runway','cocoa','oxygen','cloud','rouge')
+$script:FashionPaletteOrder = @('runway','cocoa','oxygen','cloud','rouge','terracotta','poseidon','foxglove','fuchsia')
 $script:PaletteOrder = @('sea','dusk','moss','ink','midnight','mono','cream','frost','clay')
 $script:Palettes = @{
   runway = @{ Name='钴蓝番茄'; Surface='#F4F0E9'; Border='#AEB0B7'; Track='#CFCDD0'; Outer='#3050C2'; Inner='#BC462F'; Text='#292B31'; OuterText='#263D99'; InnerText='#963B2D'; Card='#E7E4E2'; Muted='#54545B'; Button='#DAD7D7'; Metric='#334BA4' }
@@ -23,6 +23,10 @@ $script:Palettes = @{
   oxygen = @{ Name='青柠夜幕'; Surface='#171E17'; Border='#4F5B42'; Track='#3A4934'; Outer='#D4E66C'; Inner='#80D1AE'; Text='#F5F8E9'; OuterText='#F4F8CE'; InnerText='#D5F4E4'; Card='#293528'; Muted='#C5D1BA'; Button='#374633'; Metric='#D6E685' }
   cloud = @{ Name='云白鼠尾草'; Surface='#F6F5F0'; Border='#B8BAB3'; Track='#DBDED6'; Outer='#4F7866'; Inner='#745B95'; Text='#302F36'; OuterText='#355846'; InnerText='#5D4878'; Card='#EBEBE6'; Muted='#5B5E59'; Button='#DDE0D9'; Metric='#416A56' }
   rouge = @{ Name='酒红杏粉'; Surface='#261A20'; Border='#684455'; Track='#4C3440'; Outer='#E8757C'; Inner='#EDB0C1'; Text='#FCF0F3'; OuterText='#FFE0E6'; InnerText='#F2D8E6'; Card='#3A2530'; Muted='#D8BEC9'; Button='#543442'; Metric='#F3A5B6' }
+  terracotta = @{ Name='赤陶海绿'; Surface='#F6F0E8'; Border='#BEB5A9'; Track='#DED6CC'; Outer='#287A72'; Inner='#B45538'; Text='#302D2B'; OuterText='#205C56'; InnerText='#873E2A'; Card='#EAE2D8'; Muted='#5F5951'; Button='#DDD1C4'; Metric='#24645D' }
+  poseidon = @{ Name='金黄深海'; Surface='#151F32'; Border='#4A617B'; Track='#354963'; Outer='#F3CB69'; Inner='#85B7ED'; Text='#F7F4EC'; OuterText='#FCE6AE'; InnerText='#DBEAF9'; Card='#23324A'; Muted='#BDC9D8'; Button='#30435F'; Metric='#F7D784' }
+  foxglove = @{ Name='雾粉橄榄'; Surface='#F3EDE8'; Border='#BDB4A9'; Track='#DDD2CA'; Outer='#667443'; Inner='#A75B72'; Text='#302D31'; OuterText='#4F5D31'; InnerText='#843D55'; Card='#E7DCD6'; Muted='#60585A'; Button='#D9C9C3'; Metric='#586941' }
+  fuchsia = @{ Name='霓虹洋红'; Surface='#171821'; Border='#514A64'; Track='#40384F'; Outer='#EF65B4'; Inner='#74C7DF'; Text='#F8F1F8'; OuterText='#FFDCEF'; InnerText='#DBF1F7'; Card='#292531'; Muted='#CBC0CE'; Button='#393248'; Metric='#F4A0CE' }
   sea = @{ Name='深海青'; Surface='#141C24'; Border='#40515F'; Track='#34424D'; Outer='#68D1BE'; Inner='#9EB6F0'; Text='#EDF4F6'; OuterText='#F4FAFB'; InnerText='#D9E7F2'; Card='#20303A'; Muted='#B4C5CF'; Button='#2C3C47'; Metric='#83D8C8' }
   dusk = @{ Name='暮紫灰'; Surface='#211F2A'; Border='#514D62'; Track='#413D50'; Outer='#C4B0E9'; Inner='#E2B9B1'; Text='#F5F1F7'; OuterText='#F5ECFF'; InnerText='#F7DDD8'; Card='#302B3A'; Muted='#CEC2D4'; Button='#3E374A'; Metric='#D2BCEF' }
   moss = @{ Name='松烟绿'; Surface='#17211D'; Border='#47584F'; Track='#37483D'; Outer='#B9CF9A'; Inner='#83C7BA'; Text='#F1F5EE'; OuterText='#F4F9E9'; InnerText='#D2EEE6'; Card='#26322B'; Muted='#BCCBBE'; Button='#34453A'; Metric='#C5D9A9' }
@@ -650,7 +654,7 @@ $paletteMenu = New-Object Windows.Controls.MenuItem
 $paletteMenu.Header = '配色'
 $script:PaletteMenuItems = @()
 foreach ($group in @(
-    @{ title = '时装配色'; ids = $script:FashionPaletteOrder },
+    @{ title = '时尚配色'; ids = $script:FashionPaletteOrder },
     @{ title = '简约配色'; ids = $script:PaletteOrder }
   )) {
   $groupMenu = New-Object Windows.Controls.MenuItem
