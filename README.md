@@ -64,4 +64,4 @@ Codex 本地接口和会话文件格式可能变化，更新 Codex 后若额度�
 
 ## 许可证
 
-公开发布前由项目所有者确定并添加 `LICENSE` 文件。
+本项目采用 [MIT 许可证](LICENSE)，版权署名为 `Copyright (c) 2026 jay-79118`。`WindowsWidgets/WidgetHelper` 中来自 Microsoft Windows App SDK Samples 的代码保留其原有版权声明和 [MIT 许可证](WindowsWidgets/MICROSOFT-SAMPLE-LICENSE.txt)。
