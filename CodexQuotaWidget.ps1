@@ -810,6 +810,16 @@ function Show-Details {
   }
 }
 
+function Show-MiniWindow {
+  if (-not $script:Mini.IsVisible) { $script:Mini.Show() }
+  [void]$script:Mini.Activate()
+}
+
+function Hide-MiniWindow {
+  if ($script:Detail.IsVisible) { $script:Detail.Hide() }
+  if ($script:Mini.IsVisible) { $script:Mini.Hide() }
+}
+
 function Is-CenterHit($position) {
   if ($script:Skin -eq 'ring') {
     $x = $position.X / ($script:Scale * 0.75)
@@ -1046,7 +1056,9 @@ if (-not $PreviewPath -and $env:CODEX_WIDGET_SELFTEST -ne '1') {
     } else { [Drawing.SystemIcons]::Application }
     $script:TrayMenu = New-Object System.Windows.Forms.ContextMenuStrip
     $trayOpen = $script:TrayMenu.Items.Add('显示小组件')
-    $trayOpen.Add_Click({ [void]$script:Mini.Dispatcher.BeginInvoke([Action]{ [void]$script:Mini.Activate() }) })
+    $trayOpen.Add_Click({ [void]$script:Mini.Dispatcher.BeginInvoke([Action]{ Show-MiniWindow }) })
+    $trayHide = $script:TrayMenu.Items.Add('隐藏小组件')
+    $trayHide.Add_Click({ [void]$script:Mini.Dispatcher.BeginInvoke([Action]{ Hide-MiniWindow }) })
     $trayRefresh = $script:TrayMenu.Items.Add('刷新额度')
     $trayRefresh.Add_Click({ [void]$script:Mini.Dispatcher.BeginInvoke([Action]{ Refresh-Data }) })
     $trayExit = $script:TrayMenu.Items.Add('退出')
@@ -1055,7 +1067,7 @@ if (-not $PreviewPath -and $env:CODEX_WIDGET_SELFTEST -ne '1') {
     $script:TrayIcon.Icon = $script:TrayImage
     $script:TrayIcon.Text = 'Codex 额度'
     $script:TrayIcon.ContextMenuStrip = $script:TrayMenu
-    $script:TrayIcon.Add_DoubleClick({ [void]$script:Mini.Dispatcher.BeginInvoke([Action]{ [void]$script:Mini.Activate() }) })
+    $script:TrayIcon.Add_DoubleClick({ [void]$script:Mini.Dispatcher.BeginInvoke([Action]{ Show-MiniWindow }) })
     $script:TrayIcon.Visible = $true
   } catch {
     if ($script:TrayIcon) { $script:TrayIcon.Dispose(); $script:TrayIcon = $null }
@@ -1074,6 +1086,8 @@ $script:TaskReadPollTimer = New-Object Windows.Threading.DispatcherTimer
 $script:TaskReadPollTimer.Interval = [TimeSpan]::FromMilliseconds(120)
 $script:TaskReadPollTimer.Add_Tick({ Complete-TaskRead })
 $script:Mini.Add_Loaded({
+  if ($script:MiniInitialized) { return }
+  $script:MiniInitialized = $true
   $area = [Windows.SystemParameters]::WorkArea
   $script:Mini.Left = $area.Right - $script:Mini.Width - 12
   $script:Mini.Top = $area.Bottom - $script:Mini.Height - 12
@@ -1102,6 +1116,7 @@ $script:Mini.Add_Closed({
   if ($script:Detail.IsVisible) { $script:Detail.Close() }
   $script:WidgetMutex.ReleaseMutex()
   $script:WidgetMutex.Dispose()
+  if (-not $PreviewPath) { $script:Mini.Dispatcher.InvokeShutdown() }
 })
 
 if ($env:CODEX_WIDGET_SELFTEST -eq '1') {
@@ -1161,5 +1176,6 @@ if ($PreviewPath) {
   }
   $script:Mini.Close()
 } else {
-  [void]$script:Mini.ShowDialog()
+  $script:Mini.Show()
+  [Windows.Threading.Dispatcher]::Run()
 }
